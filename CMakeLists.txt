@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
         -Wall -Wextra -Wpedantic
+        -Wno-unused-result
         -march=native
         -O3
         -DNDEBUG

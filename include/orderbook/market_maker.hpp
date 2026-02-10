@@ -12,10 +12,12 @@ namespace orderbook {
 class MarketMaker {
 public:
     struct Config {
-        Price spread_ticks{10};        // Spread in ticks (scaled price units)
-        Quantity quote_size{100};       // Size of each quote
-        size_t max_position{1000};      // Maximum inventory position
-        bool enabled{true};
+        Price spread_ticks;        // Spread in ticks (scaled price units)
+        Quantity quote_size;       // Size of each quote
+        size_t max_position;       // Maximum inventory position
+        bool enabled;
+        
+        Config() : spread_ticks(10), quote_size(100), max_position(1000), enabled(true) {}
     };
     
     explicit MarketMaker(OrderBook& book, Config config = Config{})
@@ -77,7 +79,7 @@ private:
         }
     }
     
-    void on_trade(const Trade& trade) {
+    void on_trade([[maybe_unused]] const Trade& trade) {
         // Update position based on trades
         // This is simplified - production version would track order ownership
     }

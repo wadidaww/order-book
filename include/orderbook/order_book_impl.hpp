@@ -2,6 +2,7 @@
 
 #include "order_book.hpp"
 #include <algorithm>
+#include <mutex>
 
 namespace orderbook {
 
@@ -68,9 +69,6 @@ inline bool OrderBook::modify_order(OrderId id, Price new_price, Quantity new_qu
     // For simplicity, we cancel and replace
     // In production, might want to maintain time priority if price unchanged
     remove_from_book(order);
-    
-    Price old_price = order->price;
-    Quantity old_remaining = order->remaining_quantity();
     
     order->price = new_price;
     order->quantity = order->filled_quantity + new_quantity;
@@ -175,14 +173,19 @@ inline std::vector<LevelInfo> OrderBook::get_asks(size_t depth) const {
 inline Quantity OrderBook::get_volume_at_price(Price price, Side side) const {
     std::shared_lock lock(mutex_);
     
-    const auto& levels = (side == Side::Buy) ? bids_ : asks_;
-    auto it = levels.find(price);
-    
-    if (it == levels.end()) {
-        return 0;
+    if (side == Side::Buy) {
+        auto it = bids_.find(price);
+        if (it == bids_.end()) {
+            return 0;
+        }
+        return it->second->total_quantity();
+    } else {
+        auto it = asks_.find(price);
+        if (it == asks_.end()) {
+            return 0;
+        }
+        return it->second->total_quantity();
     }
-    
-    return it->second->total_quantity();
 }
 
 inline void OrderBook::clear() {
@@ -218,43 +221,77 @@ inline void OrderBook::match_order(Order* order) {
 }
 
 inline void OrderBook::match_limit_order(Order* order) {
-    auto& opposite_levels = (order->side == Side::Buy) ? asks_ : bids_;
-    
-    while (!order->is_filled() && !opposite_levels.empty()) {
-        auto& [price, level] = *opposite_levels.begin();
-        
-        // Check if we can match at this price level
-        bool can_match = (order->side == Side::Buy) ? 
-            (order->price >= price) : (order->price <= price);
-        
-        if (!can_match) {
-            break;
-        }
-        
-        // Match orders at this level
-        while (!order->is_filled() && !level->empty()) {
-            Order* maker = level->front();
-            Quantity match_qty = std::min(order->remaining_quantity(), 
-                                         maker->remaining_quantity());
+    if (order->side == Side::Buy) {
+        // Match buy order against asks
+        while (!order->is_filled() && !asks_.empty()) {
+            auto& [price, level] = *asks_.begin();
             
-            execute_trade(maker, order, match_qty);
+            // Check if we can match at this price level
+            if (order->price < price) {
+                break;
+            }
             
-            // Update or remove maker order
-            if (maker->is_filled()) {
-                level->remove_order(maker);
-                maker->status = OrderStatus::Filled;
-                notify_order_update(*maker);
-            } else {
-                Quantity old_qty = maker->remaining_quantity() + match_qty;
-                level->update_quantity(old_qty, maker->remaining_quantity());
-                maker->status = OrderStatus::PartiallyFilled;
-                notify_order_update(*maker);
+            // Match orders at this level
+            while (!order->is_filled() && !level->empty()) {
+                Order* maker = level->front();
+                Quantity match_qty = std::min(order->remaining_quantity(), 
+                                             maker->remaining_quantity());
+                
+                execute_trade(maker, order, match_qty);
+                
+                // Update or remove maker order
+                if (maker->is_filled()) {
+                    level->remove_order(maker);
+                    maker->status = OrderStatus::Filled;
+                    notify_order_update(*maker);
+                } else {
+                    Quantity old_qty = maker->remaining_quantity() + match_qty;
+                    level->update_quantity(old_qty, maker->remaining_quantity());
+                    maker->status = OrderStatus::PartiallyFilled;
+                    notify_order_update(*maker);
+                }
+            }
+            
+            // Remove empty level
+            if (level->empty()) {
+                asks_.erase(asks_.begin());
             }
         }
-        
-        // Remove empty level
-        if (level->empty()) {
-            opposite_levels.erase(opposite_levels.begin());
+    } else {
+        // Match sell order against bids
+        while (!order->is_filled() && !bids_.empty()) {
+            auto& [price, level] = *bids_.begin();
+            
+            // Check if we can match at this price level
+            if (order->price > price) {
+                break;
+            }
+            
+            // Match orders at this level
+            while (!order->is_filled() && !level->empty()) {
+                Order* maker = level->front();
+                Quantity match_qty = std::min(order->remaining_quantity(), 
+                                             maker->remaining_quantity());
+                
+                execute_trade(maker, order, match_qty);
+                
+                // Update or remove maker order
+                if (maker->is_filled()) {
+                    level->remove_order(maker);
+                    maker->status = OrderStatus::Filled;
+                    notify_order_update(*maker);
+                } else {
+                    Quantity old_qty = maker->remaining_quantity() + match_qty;
+                    level->update_quantity(old_qty, maker->remaining_quantity());
+                    maker->status = OrderStatus::PartiallyFilled;
+                    notify_order_update(*maker);
+                }
+            }
+            
+            // Remove empty level
+            if (level->empty()) {
+                bids_.erase(bids_.begin());
+            }
         }
     }
     
@@ -275,32 +312,61 @@ inline void OrderBook::match_limit_order(Order* order) {
 }
 
 inline void OrderBook::match_market_order(Order* order) {
-    auto& opposite_levels = (order->side == Side::Buy) ? asks_ : bids_;
-    
-    while (!order->is_filled() && !opposite_levels.empty()) {
-        auto& [price, level] = *opposite_levels.begin();
-        
-        while (!order->is_filled() && !level->empty()) {
-            Order* maker = level->front();
-            Quantity match_qty = std::min(order->remaining_quantity(), 
-                                         maker->remaining_quantity());
+    if (order->side == Side::Buy) {
+        // Market buy order matches against asks
+        while (!order->is_filled() && !asks_.empty()) {
+            auto& [price, level] = *asks_.begin();
             
-            execute_trade(maker, order, match_qty);
+            while (!order->is_filled() && !level->empty()) {
+                Order* maker = level->front();
+                Quantity match_qty = std::min(order->remaining_quantity(), 
+                                             maker->remaining_quantity());
+                
+                execute_trade(maker, order, match_qty);
+                
+                if (maker->is_filled()) {
+                    level->remove_order(maker);
+                    maker->status = OrderStatus::Filled;
+                    notify_order_update(*maker);
+                } else {
+                    Quantity old_qty = maker->remaining_quantity() + match_qty;
+                    level->update_quantity(old_qty, maker->remaining_quantity());
+                    maker->status = OrderStatus::PartiallyFilled;
+                    notify_order_update(*maker);
+                }
+            }
             
-            if (maker->is_filled()) {
-                level->remove_order(maker);
-                maker->status = OrderStatus::Filled;
-                notify_order_update(*maker);
-            } else {
-                Quantity old_qty = maker->remaining_quantity() + match_qty;
-                level->update_quantity(old_qty, maker->remaining_quantity());
-                maker->status = OrderStatus::PartiallyFilled;
-                notify_order_update(*maker);
+            if (level->empty()) {
+                asks_.erase(asks_.begin());
             }
         }
-        
-        if (level->empty()) {
-            opposite_levels.erase(opposite_levels.begin());
+    } else {
+        // Market sell order matches against bids
+        while (!order->is_filled() && !bids_.empty()) {
+            auto& [price, level] = *bids_.begin();
+            
+            while (!order->is_filled() && !level->empty()) {
+                Order* maker = level->front();
+                Quantity match_qty = std::min(order->remaining_quantity(), 
+                                             maker->remaining_quantity());
+                
+                execute_trade(maker, order, match_qty);
+                
+                if (maker->is_filled()) {
+                    level->remove_order(maker);
+                    maker->status = OrderStatus::Filled;
+                    notify_order_update(*maker);
+                } else {
+                    Quantity old_qty = maker->remaining_quantity() + match_qty;
+                    level->update_quantity(old_qty, maker->remaining_quantity());
+                    maker->status = OrderStatus::PartiallyFilled;
+                    notify_order_update(*maker);
+                }
+            }
+            
+            if (level->empty()) {
+                bids_.erase(bids_.begin());
+            }
         }
     }
     
@@ -308,26 +374,43 @@ inline void OrderBook::match_market_order(Order* order) {
 }
 
 inline void OrderBook::add_to_book(Order* order) {
-    auto& levels = (order->side == Side::Buy) ? bids_ : asks_;
-    
-    auto it = levels.find(order->price);
-    if (it == levels.end()) {
-        auto level = std::make_unique<PriceLevel>(order->price);
-        level->add_order(order);
-        levels[order->price] = std::move(level);
+    if (order->side == Side::Buy) {
+        auto it = bids_.find(order->price);
+        if (it == bids_.end()) {
+            auto level = std::make_unique<PriceLevel>(order->price);
+            level->add_order(order);
+            bids_[order->price] = std::move(level);
+        } else {
+            it->second->add_order(order);
+        }
     } else {
-        it->second->add_order(order);
+        auto it = asks_.find(order->price);
+        if (it == asks_.end()) {
+            auto level = std::make_unique<PriceLevel>(order->price);
+            level->add_order(order);
+            asks_[order->price] = std::move(level);
+        } else {
+            it->second->add_order(order);
+        }
     }
 }
 
 inline void OrderBook::remove_from_book(Order* order) {
-    auto& levels = (order->side == Side::Buy) ? bids_ : asks_;
-    
-    auto it = levels.find(order->price);
-    if (it != levels.end()) {
-        it->second->remove_order(order);
-        if (it->second->empty()) {
-            levels.erase(it);
+    if (order->side == Side::Buy) {
+        auto it = bids_.find(order->price);
+        if (it != bids_.end()) {
+            it->second->remove_order(order);
+            if (it->second->empty()) {
+                bids_.erase(it);
+            }
+        }
+    } else {
+        auto it = asks_.find(order->price);
+        if (it != asks_.end()) {
+            it->second->remove_order(order);
+            if (it->second->empty()) {
+                asks_.erase(it);
+            }
         }
     }
 }

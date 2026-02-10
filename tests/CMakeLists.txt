@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
 
-# Simple test framework
-add_executable(test_order_book 
-    test_order_book.cpp
-    test_matching.cpp
-    test_analytics.cpp
-)
+# Create separate test executables
+add_executable(test_order_book test_order_book.cpp)
 target_link_libraries(test_order_book PRIVATE orderbook)
 
+add_executable(test_matching test_matching.cpp)
+target_link_libraries(test_matching PRIVATE orderbook)
+
+add_executable(test_analytics test_analytics.cpp)
+target_link_libraries(test_analytics PRIVATE orderbook)
+
+# Add tests
 add_test(NAME OrderBookTests COMMAND test_order_book)
+add_test(NAME MatchingTests COMMAND test_matching)
+add_test(NAME AnalyticsTests COMMAND test_analytics)
