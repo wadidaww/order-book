@@ -56,7 +56,21 @@ public:
         
         return sum_volume > 0 ? sum_price_volume / sum_volume : 0.0;
     }
-    
+
+    // Calculate time-weighted average price (TWAP)
+    [[nodiscard]] double calculate_twap() const {
+      if (trades_.empty()) {
+        return 0.0;
+      }
+
+      double sum = 0.0;
+      for (const auto &trade : trades_) {
+        sum += static_cast<double>(trade.price);
+      }
+
+      return sum / trades_.size();
+    }
+
     // Calculate price volatility (standard deviation)
     [[nodiscard]] double calculate_volatility() const {
         if (trades_.size() < 2) {
@@ -64,12 +78,8 @@ public:
         }
         
         // Calculate mean price
-        double mean = 0.0;
-        for (const auto& trade : trades_) {
-            mean += static_cast<double>(trade.price);
-        }
-        mean /= trades_.size();
-        
+        double mean = calculate_twap();
+
         // Calculate variance
         double variance = 0.0;
         for (const auto& trade : trades_) {
