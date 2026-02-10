@@ -289,7 +289,7 @@ Contributions are welcome! Please ensure:
 ## References
 
 - "Trading and Exchanges" by Larry Harris
-- "High-Performance Trading" by Michael Perklin
+- "Algorithmic Trading and DMA" by Barry Johnson
 - "Algorithmic Trading" by Ernest Chan
 - ITCH Protocol Specification
 - FIX Protocol Specification

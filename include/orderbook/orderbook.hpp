@@ -157,23 +157,19 @@ public:
     // Get spread
     [[nodiscard]] std::optional<Price> spread() const {
         std::shared_lock lock(mutex_);
-        auto bid = best_bid();
-        auto ask = best_ask();
-        if (bid && ask) {
-            return *ask - *bid;
+        if (bids_.empty() || asks_.empty()) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return asks_.begin()->first - bids_.begin()->first;
     }
     
     // Get mid price
     [[nodiscard]] std::optional<Price> mid_price() const {
         std::shared_lock lock(mutex_);
-        auto bid = best_bid();
-        auto ask = best_ask();
-        if (bid && ask) {
-            return (*bid + *ask) / 2;
+        if (bids_.empty() || asks_.empty()) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return (bids_.begin()->first + asks_.begin()->first) / 2;
     }
     
     // Get order book depth
@@ -309,7 +305,7 @@ private:
                 send_execution_report(resting_order, ExecutionType::Fill);
             } else {
                 resting_order->status = OrderStatus::PartiallyFilled;
-                level.update_quantity(resting_order, old_remaining, resting_order->remaining_quantity());
+                level.update_quantity(old_remaining, resting_order->remaining_quantity());
                 send_execution_report(resting_order, ExecutionType::PartialFill);
             }
             
