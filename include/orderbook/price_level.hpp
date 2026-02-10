@@ -54,7 +54,7 @@ public:
     }
     
     // Update quantity after partial fill
-    void update_quantity(Order* order, Quantity old_remaining, Quantity new_remaining) noexcept {
+    void update_quantity([[maybe_unused]] Order* order, Quantity old_remaining, Quantity new_remaining) noexcept {
         total_quantity_ = total_quantity_ - old_remaining + new_remaining;
     }
     

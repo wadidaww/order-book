@@ -142,7 +142,7 @@ public:
         if (bids_.empty()) {
             return std::nullopt;
         }
-        return bids_.rbegin()->first;
+        return bids_.begin()->first;  // Highest bid is at begin() due to std::greater<>
     }
     
     // Get current best ask price
@@ -185,10 +185,16 @@ public:
     // Get total volume at price level
     [[nodiscard]] Quantity volume_at_price(Side side, Price price) const {
         std::shared_lock lock(mutex_);
-        const auto& levels = (side == Side::Buy) ? bids_ : asks_;
-        auto it = levels.find(price);
-        if (it != levels.end()) {
-            return it->second.total_quantity();
+        if (side == Side::Buy) {
+            auto it = bids_.find(price);
+            if (it != bids_.end()) {
+                return it->second.total_quantity();
+            }
+        } else {
+            auto it = asks_.find(price);
+            if (it != asks_.end()) {
+                return it->second.total_quantity();
+            }
         }
         return 0;
     }
@@ -207,9 +213,9 @@ public:
         std::vector<DepthLevel> bid_levels;
         std::vector<DepthLevel> ask_levels;
         
-        // Get bid levels (highest to lowest)
+        // Get bid levels (highest to lowest) - bids_ already sorted highest first
         size_t count = 0;
-        for (auto it = bids_.rbegin(); it != bids_.rend() && count < max_levels; ++it, ++count) {
+        for (auto it = bids_.begin(); it != bids_.end() && count < max_levels; ++it, ++count) {
             bid_levels.push_back({it->first, it->second.total_quantity(), it->second.order_count()});
         }
         
@@ -228,68 +234,86 @@ public:
     
 private:
     void match_order(Order* order) {
-        auto& opposite_levels = order->is_buy() ? asks_ : bids_;
-        
-        while (order->remaining_quantity() > 0 && !opposite_levels.empty()) {
-            auto it = order->is_buy() ? opposite_levels.begin() : opposite_levels.rbegin();
-            Price opposite_price = order->is_buy() ? it->first : it->first;
-            
-            // Check if prices cross
-            bool can_match = order->is_buy() ? 
-                (order->price >= opposite_price) : 
-                (order->price <= opposite_price);
-                
-            if (!can_match) {
-                break;
-            }
-            
-            // Get price level
-            PriceLevel& level = order->is_buy() ? 
-                opposite_levels.begin()->second : 
-                (--opposite_levels.end())->second;
-            
-            // Match against orders in price level (FIFO)
-            Order* resting_order = level.head();
-            while (resting_order && order->remaining_quantity() > 0) {
-                Quantity match_qty = std::min(order->remaining_quantity(), 
-                                             resting_order->remaining_quantity());
-                
-                // Execute trade
-                execute_trade(order, resting_order, match_qty, opposite_price);
-                
-                Order* next = resting_order->next;
-                
-                // Update resting order
-                Quantity old_remaining = resting_order->remaining_quantity();
-                resting_order->filled_quantity += match_qty;
-                
-                if (resting_order->remaining_quantity() == 0) {
-                    resting_order->status = OrderStatus::Filled;
-                    level.remove_order(resting_order);
-                    send_execution_report(resting_order, ExecutionType::Fill);
-                } else {
-                    resting_order->status = OrderStatus::PartiallyFilled;
-                    level.update_quantity(resting_order, old_remaining, resting_order->remaining_quantity());
-                    send_execution_report(resting_order, ExecutionType::PartialFill);
-                }
-                
-                resting_order = next;
-            }
-            
-            // Remove empty price level
-            if (level.empty()) {
-                if (order->is_buy()) {
-                    opposite_levels.erase(opposite_levels.begin());
-                } else {
-                    opposite_levels.erase((--opposite_levels.end())->first);
-                }
-            }
+        if (order->is_buy()) {
+            match_buy_order(order);
+        } else {
+            match_sell_order(order);
         }
         
         // Update incoming order status
         if (order->filled_quantity > 0) {
             order->status = order->remaining_quantity() > 0 ? 
                 OrderStatus::PartiallyFilled : OrderStatus::Filled;
+        }
+    }
+    
+    void match_buy_order(Order* order) {
+        while (order->remaining_quantity() > 0 && !asks_.empty()) {
+            auto it = asks_.begin();
+            Price ask_price = it->first;
+            
+            // Check if prices cross
+            if (order->price < ask_price) {
+                break;
+            }
+            
+            PriceLevel& level = it->second;
+            match_against_level(order, level, ask_price);
+            
+            // Remove empty price level
+            if (level.empty()) {
+                asks_.erase(it);
+            }
+        }
+    }
+    
+    void match_sell_order(Order* order) {
+        while (order->remaining_quantity() > 0 && !bids_.empty()) {
+            auto it = bids_.begin();  // Highest bid
+            Price bid_price = it->first;
+            
+            // Check if prices cross
+            if (order->price > bid_price) {
+                break;
+            }
+            
+            PriceLevel& level = it->second;
+            match_against_level(order, level, bid_price);
+            
+            // Remove empty price level
+            if (level.empty()) {
+                bids_.erase(it);
+            }
+        }
+    }
+    
+    void match_against_level(Order* order, PriceLevel& level, Price trade_price) {
+        // Match against orders in price level (FIFO)
+        Order* resting_order = level.head();
+        while (resting_order && order->remaining_quantity() > 0) {
+            Quantity match_qty = std::min(order->remaining_quantity(), 
+                                         resting_order->remaining_quantity());
+            
+            // Execute trade
+            execute_trade(order, resting_order, match_qty, trade_price);
+            
+            Order* next = resting_order->next;
+            
+            // Update resting order
+            Quantity old_remaining = resting_order->remaining_quantity();
+            resting_order->filled_quantity += match_qty;
+            
+            if (resting_order->remaining_quantity() == 0) {
+                resting_order->status = OrderStatus::Filled;
+                level.remove_order(resting_order);
+                send_execution_report(resting_order, ExecutionType::Fill);
+            } else {
+                resting_order->status = OrderStatus::PartiallyFilled;
+                level.update_quantity(resting_order, old_remaining, resting_order->remaining_quantity());
+                send_execution_report(resting_order, ExecutionType::PartialFill);
+            }
+            
+            resting_order = next;
         }
     }
     
@@ -313,17 +337,29 @@ private:
     }
     
     void add_to_book(Order* order) {
-        auto& levels = order->is_buy() ? bids_ : asks_;
-        levels[order->price].add_order(order);
+        if (order->is_buy()) {
+            bids_[order->price].add_order(order);
+        } else {
+            asks_[order->price].add_order(order);
+        }
     }
     
     void remove_from_book(Order* order) {
-        auto& levels = order->is_buy() ? bids_ : asks_;
-        auto it = levels.find(order->price);
-        if (it != levels.end()) {
-            it->second.remove_order(order);
-            if (it->second.empty()) {
-                levels.erase(it);
+        if (order->is_buy()) {
+            auto it = bids_.find(order->price);
+            if (it != bids_.end()) {
+                it->second.remove_order(order);
+                if (it->second.empty()) {
+                    bids_.erase(it);
+                }
+            }
+        } else {
+            auto it = asks_.find(order->price);
+            if (it != asks_.end()) {
+                it->second.remove_order(order);
+                if (it->second.empty()) {
+                    asks_.erase(it);
+                }
             }
         }
     }

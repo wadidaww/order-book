@@ -89,6 +89,19 @@ enum class ExecutionType : uint8_t {
     return "Unknown";
 }
 
+// Convert execution type to string
+[[nodiscard]] constexpr std::string_view to_string(ExecutionType exec_type) noexcept {
+    switch (exec_type) {
+        case ExecutionType::New: return "New";
+        case ExecutionType::PartialFill: return "PartialFill";
+        case ExecutionType::Fill: return "Fill";
+        case ExecutionType::Cancelled: return "Cancelled";
+        case ExecutionType::Replaced: return "Replaced";
+        case ExecutionType::Rejected: return "Rejected";
+    }
+    return "Unknown";
+}
+
 // Price level key with comparison optimized for map lookups
 struct PriceLevelKey {
     Price price;
