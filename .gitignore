@@ -39,3 +39,21 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+cmake-build-*/
+.cmake/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Profile-guided optimization
+*.gcda
+*.gcno
+*.gcov
