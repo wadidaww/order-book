@@ -44,6 +44,7 @@
 build/
 build-*/
 cmake-build-*/
+_codeql_build_dir/
 
 # IDE files
 .vscode/
@@ -59,3 +60,6 @@ cmake_install.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+
+# CodeQL
+_codeql_detected_source_root
