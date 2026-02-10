@@ -6,6 +6,7 @@
 #include <numeric>
 #include <cmath>
 #include <deque>
+#include <map>
 
 namespace orderbook {
 
@@ -146,7 +147,7 @@ public:
             return 0.0;
         }
         
-        return (static_cast<double>(bid_volume) - ask_volume) / total;
+        return (static_cast<double>(bid_volume) - static_cast<double>(ask_volume)) / static_cast<double>(total);
     }
     
     // Reset analytics

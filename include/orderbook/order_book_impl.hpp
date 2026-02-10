@@ -237,16 +237,18 @@ inline void OrderBook::match_limit_order(Order* order) {
                 Quantity match_qty = std::min(order->remaining_quantity(), 
                                              maker->remaining_quantity());
                 
+                // Update level quantity BEFORE executing trade
+                Quantity old_maker_qty = maker->remaining_quantity();
                 execute_trade(maker, order, match_qty);
+                Quantity new_maker_qty = maker->remaining_quantity();
+                level->update_quantity(old_maker_qty, new_maker_qty);
                 
-                // Update or remove maker order
+                // Remove maker order if filled
                 if (maker->is_filled()) {
                     level->remove_order(maker);
                     maker->status = OrderStatus::Filled;
                     notify_order_update(*maker);
                 } else {
-                    Quantity old_qty = maker->remaining_quantity() + match_qty;
-                    level->update_quantity(old_qty, maker->remaining_quantity());
                     maker->status = OrderStatus::PartiallyFilled;
                     notify_order_update(*maker);
                 }
@@ -273,16 +275,18 @@ inline void OrderBook::match_limit_order(Order* order) {
                 Quantity match_qty = std::min(order->remaining_quantity(), 
                                              maker->remaining_quantity());
                 
+                // Update level quantity BEFORE executing trade
+                Quantity old_maker_qty = maker->remaining_quantity();
                 execute_trade(maker, order, match_qty);
+                Quantity new_maker_qty = maker->remaining_quantity();
+                level->update_quantity(old_maker_qty, new_maker_qty);
                 
-                // Update or remove maker order
+                // Remove maker order if filled
                 if (maker->is_filled()) {
                     level->remove_order(maker);
                     maker->status = OrderStatus::Filled;
                     notify_order_update(*maker);
                 } else {
-                    Quantity old_qty = maker->remaining_quantity() + match_qty;
-                    level->update_quantity(old_qty, maker->remaining_quantity());
                     maker->status = OrderStatus::PartiallyFilled;
                     notify_order_update(*maker);
                 }
@@ -322,15 +326,17 @@ inline void OrderBook::match_market_order(Order* order) {
                 Quantity match_qty = std::min(order->remaining_quantity(), 
                                              maker->remaining_quantity());
                 
+                // Update level quantity BEFORE executing trade
+                Quantity old_maker_qty = maker->remaining_quantity();
                 execute_trade(maker, order, match_qty);
+                Quantity new_maker_qty = maker->remaining_quantity();
+                level->update_quantity(old_maker_qty, new_maker_qty);
                 
                 if (maker->is_filled()) {
                     level->remove_order(maker);
                     maker->status = OrderStatus::Filled;
                     notify_order_update(*maker);
                 } else {
-                    Quantity old_qty = maker->remaining_quantity() + match_qty;
-                    level->update_quantity(old_qty, maker->remaining_quantity());
                     maker->status = OrderStatus::PartiallyFilled;
                     notify_order_update(*maker);
                 }
@@ -350,15 +356,17 @@ inline void OrderBook::match_market_order(Order* order) {
                 Quantity match_qty = std::min(order->remaining_quantity(), 
                                              maker->remaining_quantity());
                 
+                // Update level quantity BEFORE executing trade
+                Quantity old_maker_qty = maker->remaining_quantity();
                 execute_trade(maker, order, match_qty);
+                Quantity new_maker_qty = maker->remaining_quantity();
+                level->update_quantity(old_maker_qty, new_maker_qty);
                 
                 if (maker->is_filled()) {
                     level->remove_order(maker);
                     maker->status = OrderStatus::Filled;
                     notify_order_update(*maker);
                 } else {
-                    Quantity old_qty = maker->remaining_quantity() + match_qty;
-                    level->update_quantity(old_qty, maker->remaining_quantity());
                     maker->status = OrderStatus::PartiallyFilled;
                     notify_order_update(*maker);
                 }

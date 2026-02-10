@@ -53,15 +53,15 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 
 ## Performance Characteristics
 
-Based on benchmarks on modern hardware:
+Based on benchmarks on modern hardware (single-threaded):
 
-- **Order Insertion**: ~1-2 μs average latency
-- **Order Matching**: ~2-3 μs average latency
-- **Order Cancellation**: ~0.5-1 μs average latency
-- **Market Data Access**: ~50-100 ns (best bid/ask)
-- **Throughput**: 500,000+ operations/second (single-threaded)
+- **Order Insertion**: ~0.18 μs average latency
+- **Order Matching**: ~0.19 μs average latency
+- **Order Cancellation**: ~0.33 μs average latency
+- **Market Data Access**: ~46 ns (best bid/ask)
+- **Throughput**: 5.8M+ operations/second
 
-*Note: Actual performance depends on hardware, workload, and system configuration.*
+*Note: Actual performance depends on hardware, workload, and system configuration. Results above from Intel/AMD x86_64 with -O3 -march=native optimizations.*
 
 ## Building
 
