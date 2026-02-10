@@ -80,7 +80,7 @@ cd order-book
 mkdir build && cd build
 
 # Configure
-cmake ..
+cmake -G Ninja ..
 
 # Build
 cmake --build .

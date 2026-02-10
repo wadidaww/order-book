@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Generate a compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# command for Ninja (not working)
+set(CMAKE_GENERATOR Ninja)
+
 # Compiler flags for performance and warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
