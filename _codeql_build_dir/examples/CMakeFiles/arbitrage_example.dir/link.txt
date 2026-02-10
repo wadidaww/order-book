@@ -1,1 +1,0 @@
-/home/runner/work/order-book/.codeql-scratch/dbs/cpp/working/autobuild/bin/c++  -Wall -Wextra -Wpedantic -O3 -march=native -mtune=native -flto -ffast-math -funroll-loops -finline-functions -Wl,--dependency-file=CMakeFiles/arbitrage_example.dir/link.d CMakeFiles/arbitrage_example.dir/arbitrage_example.cpp.o -o arbitrage_example
