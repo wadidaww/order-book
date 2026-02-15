@@ -159,7 +159,13 @@ public:
         
         return (static_cast<double>(bid_volume) - static_cast<double>(ask_volume)) / static_cast<double>(total);
     }
-    
+
+    [[nodiscard]] size_t trade_count() const noexcept { return trades_.size(); }
+
+    [[nodiscard]] Price last_price() const noexcept {
+      return trades_.empty() ? 0 : trades_.back().price;
+    }
+
     // Reset analytics
     void clear() {
         trades_.clear();
