@@ -8,6 +8,7 @@
 #include "orderbook/price_level.hpp"
 #include "orderbook/order_book.hpp"
 #include "orderbook/order_book_impl.hpp"
+#include "orderbook/concurrent_order_book.hpp"
 #include "orderbook/market_maker.hpp"
 #include "orderbook/arbitrage.hpp"
 #include "orderbook/analytics.hpp"

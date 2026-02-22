@@ -8,80 +8,124 @@ namespace orderbook {
 
 inline bool OrderBook::add_order(OrderId id, Price price, Quantity quantity, 
                                   Side side, OrderType type) {
-    std::unique_lock lock(mutex_);
-    
-    // Check if order ID already exists
-    if (orders_.find(id) != orders_.end()) {
-        return false;
+    std::vector<Trade> local_trades;
+    std::vector<Order> local_updates;
+
+    {
+        std::unique_lock lock(mutex_);
+
+        // Check if order ID already exists
+        if (orders_.find(id) != orders_.end()) {
+            return false;
+        }
+
+        // Allocate order from pool
+        auto* order = order_pool_.allocate(id, price, quantity, side, type, now());
+        orders_[id] = order;
+
+        // Match the order
+        match_order(order);
+
+        // If order is not fully filled and it's a limit order, add to book
+        if (!order->is_filled() && order->type == OrderType::Limit) {
+            add_to_book(order);
+        }
+
+        notify_order_update(*order);
+
+        // Collect notifications before releasing the lock
+        local_trades.swap(pending_trades_);
+        local_updates.swap(pending_updates_);
     }
-    
-    // Allocate order from pool
-    auto* order = order_pool_.allocate(id, price, quantity, side, type, now());
-    orders_[id] = order;
-    
-    // Match the order
-    match_order(order);
-    
-    // If order is not fully filled and it's a limit order, add to book
-    if (!order->is_filled() && order->type == OrderType::Limit) {
-        add_to_book(order);
+
+    // Dispatch callbacks outside the lock to prevent re-entrancy deadlocks
+    for (const auto& t : local_trades) {
+        if (trade_callback_) trade_callback_(t);
     }
-    
-    notify_order_update(*order);
+    for (const auto& u : local_updates) {
+        if (order_update_callback_) order_update_callback_(u);
+    }
+
     return true;
 }
 
 inline bool OrderBook::cancel_order(OrderId id) {
-    std::unique_lock lock(mutex_);
-    
-    auto it = orders_.find(id);
-    if (it == orders_.end()) {
-        return false;
+    std::vector<Order> local_updates;
+
+    {
+        std::unique_lock lock(mutex_);
+
+        auto it = orders_.find(id);
+        if (it == orders_.end()) {
+            return false;
+        }
+
+        Order* order = it->second;
+
+        // Remove from book if still there
+        if (order->status == OrderStatus::New || order->status == OrderStatus::PartiallyFilled) {
+            remove_from_book(order);
+        }
+
+        order->status = OrderStatus::Cancelled;
+        notify_order_update(*order);
+
+        // Cleanup
+        orders_.erase(it);
+        order_pool_.deallocate(order);
+
+        local_updates.swap(pending_updates_);
     }
-    
-    Order* order = it->second;
-    
-    // Remove from book if still there
-    if (order->status == OrderStatus::New || order->status == OrderStatus::PartiallyFilled) {
-        remove_from_book(order);
+
+    for (const auto& u : local_updates) {
+        if (order_update_callback_) order_update_callback_(u);
     }
-    
-    order->status = OrderStatus::Cancelled;
-    notify_order_update(*order);
-    
-    // Cleanup
-    orders_.erase(it);
-    order_pool_.deallocate(order);
-    
+
     return true;
 }
 
 inline bool OrderBook::modify_order(OrderId id, Price new_price, Quantity new_quantity) {
-    std::unique_lock lock(mutex_);
-    
-    auto it = orders_.find(id);
-    if (it == orders_.end()) {
-        return false;
+    std::vector<Trade> local_trades;
+    std::vector<Order> local_updates;
+
+    {
+        std::unique_lock lock(mutex_);
+
+        auto it = orders_.find(id);
+        if (it == orders_.end()) {
+            return false;
+        }
+
+        Order* order = it->second;
+
+        // For simplicity, we cancel and replace
+        // In production, might want to maintain time priority if price unchanged
+        remove_from_book(order);
+
+        order->price = new_price;
+        order->quantity = order->filled_quantity + new_quantity;
+
+        // Try to match with new price
+        match_order(order);
+
+        // Add back to book if not filled
+        if (!order->is_filled() && order->type == OrderType::Limit) {
+            add_to_book(order);
+        }
+
+        notify_order_update(*order);
+
+        local_trades.swap(pending_trades_);
+        local_updates.swap(pending_updates_);
     }
-    
-    Order* order = it->second;
-    
-    // For simplicity, we cancel and replace
-    // In production, might want to maintain time priority if price unchanged
-    remove_from_book(order);
-    
-    order->price = new_price;
-    order->quantity = order->filled_quantity + new_quantity;
-    
-    // Try to match with new price
-    match_order(order);
-    
-    // Add back to book if not filled
-    if (!order->is_filled() && order->type == OrderType::Limit) {
-        add_to_book(order);
+
+    for (const auto& t : local_trades) {
+        if (trade_callback_) trade_callback_(t);
     }
-    
-    notify_order_update(*order);
+    for (const auto& u : local_updates) {
+        if (order_update_callback_) order_update_callback_(u);
+    }
+
     return true;
 }
 
@@ -117,25 +161,23 @@ inline std::optional<Price> OrderBook::best_ask() const {
 }
 
 inline std::optional<Price> OrderBook::spread() const {
-    auto bid = best_bid();
-    auto ask = best_ask();
-    
-    if (!bid || !ask) {
+    std::shared_lock lock(mutex_);
+
+    if (bids_.empty() || asks_.empty()) {
         return std::nullopt;
     }
-    
-    return *ask - *bid;
+
+    return asks_.begin()->first - bids_.begin()->first;
 }
 
 inline std::optional<Price> OrderBook::mid_price() const {
-    auto bid = best_bid();
-    auto ask = best_ask();
-    
-    if (!bid || !ask) {
+    std::shared_lock lock(mutex_);
+
+    if (bids_.empty() || asks_.empty()) {
         return std::nullopt;
     }
-    
-    return (*bid + *ask) / 2;
+
+    return (bids_.begin()->first + asks_.begin()->first) / 2;
 }
 
 inline std::vector<LevelInfo> OrderBook::get_bids(size_t depth) const {
@@ -432,15 +474,11 @@ inline void OrderBook::execute_trade(Order* maker, Order* taker, Quantity quanti
 }
 
 inline void OrderBook::notify_trade(const Trade& trade) {
-    if (trade_callback_) {
-        trade_callback_(trade);
-    }
+    pending_trades_.push_back(trade);
 }
 
 inline void OrderBook::notify_order_update(const Order& order) {
-    if (order_update_callback_) {
-        order_update_callback_(order);
-    }
+    pending_updates_.push_back(order);
 }
 
 inline Timestamp OrderBook::now() const {
