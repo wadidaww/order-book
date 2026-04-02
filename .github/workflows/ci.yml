@@ -1,0 +1,171 @@
+name: CI
+
+# Run on every push and on pull requests targeting main / master.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, master]
+
+# Limit the GITHUB_TOKEN to read-only access — no write permissions needed.
+permissions:
+  contents: read
+
+# Cancel an in-progress run for the same ref when a newer commit is pushed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build and test with two compilers in Release mode.
+  #    Validates that the code compiles cleanly and all unit tests pass.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 13
+            cc: gcc-13
+            cxx: g++-13
+            packages: gcc-13 g++-13
+          - name: Clang 18
+            cc: clang-18
+            cxx: clang++-18
+            packages: clang-18
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ${{ matrix.packages }}
+
+      - name: Configure (Release)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --parallel $(nproc)
+
+  # ---------------------------------------------------------------------------
+  # 2. AddressSanitizer + UBSanitizer + LeakSanitizer.
+  #    Detects heap/stack memory errors, use-after-free, undefined behaviour,
+  #    and memory leaks at runtime.
+  # ---------------------------------------------------------------------------
+  sanitize:
+    name: ASan / UBSan / LSan (Clang 18)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-18
+
+      - name: Configure (ASan + UBSan)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DENABLE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        env:
+          # detect_leaks=1 enables LeakSanitizer (Linux only).
+          # abort_on_error=1 makes sanitizer failures look like crashes so
+          # ctest marks them as failures rather than passing.
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:abort_on_error=1
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # 3. ThreadSanitizer.
+  #    Detects data races and lock-order inversions in the concurrent code
+  #    (ConcurrentOrderBook and the shared_mutex inside OrderBook).
+  # ---------------------------------------------------------------------------
+  thread-sanitize:
+    name: ThreadSanitizer (Clang 18)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang 18
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-18
+
+      - name: Configure (TSan)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DENABLE_TSAN=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # 4. Valgrind Memcheck.
+  #    Independent memory-error and leak checker that works at the binary
+  #    level without requiring recompilation with sanitizer flags.
+  # ---------------------------------------------------------------------------
+  valgrind:
+    name: Valgrind Memcheck (GCC 13)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GCC 13 and Valgrind
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-13 g++-13 valgrind
+
+      - name: Configure (Debug)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc-13 \
+            -DCMAKE_CXX_COMPILER=g++-13
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test with Valgrind
+        run: |
+          for test in \
+            build/tests/test_order_book \
+            build/tests/test_matching \
+            build/tests/test_analytics \
+            build/tests/test_concurrency; do
+            echo "=== Valgrind: $(basename $test) ==="
+            valgrind \
+              --error-exitcode=1 \
+              --leak-check=full \
+              --track-origins=yes \
+              --show-leak-kinds=all \
+              --errors-for-leak-kinds=all \
+              "$test"
+          done

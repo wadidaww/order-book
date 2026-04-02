@@ -167,7 +167,9 @@ inline std::optional<Price> OrderBook::spread() const {
         return std::nullopt;
     }
 
-    return asks_.begin()->first - bids_.begin()->first;
+    // Compute while the lock is still held; the named local makes this explicit.
+    Price result = asks_.begin()->first - bids_.begin()->first;
+    return result;
 }
 
 inline std::optional<Price> OrderBook::mid_price() const {
@@ -177,7 +179,9 @@ inline std::optional<Price> OrderBook::mid_price() const {
         return std::nullopt;
     }
 
-    return (bids_.begin()->first + asks_.begin()->first) / 2;
+    // Compute while the lock is still held; the named local makes this explicit.
+    Price result = (bids_.begin()->first + asks_.begin()->first) / 2;
+    return result;
 }
 
 inline std::vector<LevelInfo> OrderBook::get_bids(size_t depth) const {
