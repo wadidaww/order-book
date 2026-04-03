@@ -10,6 +10,7 @@
 #include <shared_mutex>
 #include <functional>
 #include <optional>
+#include <mutex>
 
 namespace orderbook {
 
@@ -109,6 +110,13 @@ private:
     // Callbacks
     TradeCallback trade_callback_;
     OrderUpdateCallback order_update_callback_;
+    
+    // Pending notifications collected while the mutex is held.
+    // Swapped to local vectors before the lock is released so that
+    // callbacks are always invoked without the mutex, preventing
+    // deadlocks when a callback re-enters the OrderBook.
+    std::vector<Trade> pending_trades_;
+    std::vector<Order> pending_updates_;
 };
 
 } // namespace orderbook

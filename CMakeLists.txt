@@ -5,15 +5,43 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Compiler flags for performance and warnings
+# Sanitizer options (mutually exclusive)
+option(ENABLE_ASAN "Enable AddressSanitizer + UBSanitizer + LeakSanitizer" OFF)
+option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+
+if(ENABLE_ASAN AND ENABLE_TSAN)
+    message(FATAL_ERROR "ENABLE_ASAN and ENABLE_TSAN are mutually exclusive")
+endif()
+
+# Compiler flags for warnings (always applied)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
         -Wall -Wextra -Wpedantic
         -Wno-unused-result
-        -march=native
-        -O3
-        -DNDEBUG
     )
+
+    # Performance flags — skipped for sanitizer and explicit Debug builds so
+    # that instrumentation tools get accurate diagnostics.
+    if(NOT ENABLE_ASAN AND NOT ENABLE_TSAN AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_options(-march=native -O3 -DNDEBUG)
+    endif()
+
+    # AddressSanitizer + UBSanitizer + LeakSanitizer
+    if(ENABLE_ASAN)
+        add_compile_options(-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+
+    # ThreadSanitizer
+    if(ENABLE_TSAN)
+        add_compile_options(-g -O1 -fsanitize=thread -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=thread)
+    endif()
+
+    # Plain Debug build (no sanitizers)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT ENABLE_ASAN AND NOT ENABLE_TSAN)
+        add_compile_options(-g -O0)
+    endif()
 endif()
 
 # Include directories
