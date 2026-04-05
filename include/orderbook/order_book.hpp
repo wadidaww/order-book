@@ -24,9 +24,11 @@ public:
     OrderBook() = default;
     ~OrderBook() = default;
     
-    // Non-copyable
+    // Non-copyable, non-movable
     OrderBook(const OrderBook&) = delete;
     OrderBook& operator=(const OrderBook&) = delete;
+    OrderBook(OrderBook&&) = delete;
+    OrderBook& operator=(OrderBook&&) = delete;
     
     // Add a new order to the book
     [[nodiscard]] bool add_order(OrderId id, Price price, Quantity quantity, 

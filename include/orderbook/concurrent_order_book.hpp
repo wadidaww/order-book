@@ -24,9 +24,11 @@ public:
     ConcurrentOrderBook();
     ~ConcurrentOrderBook();
 
-    // Non-copyable
+    // Non-copyable, non-movable
     ConcurrentOrderBook(const ConcurrentOrderBook&) = delete;
     ConcurrentOrderBook& operator=(const ConcurrentOrderBook&) = delete;
+    ConcurrentOrderBook(ConcurrentOrderBook&&) = delete;
+    ConcurrentOrderBook& operator=(ConcurrentOrderBook&&) = delete;
 
     // Submit requests asynchronously. Thread-safe. Returns a future that
     // resolves to true on success, false on failure (e.g., duplicate ID).

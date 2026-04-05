@@ -59,20 +59,18 @@ struct Order {
     OrderId id;
     Price price;
     Quantity quantity;
-    Quantity filled_quantity;
+    Quantity filled_quantity{0};
     Side side;
     OrderType type;
-    OrderStatus status;
+    OrderStatus status{OrderStatus::New};
     Timestamp timestamp;
     
     Order(OrderId order_id, Price p, Quantity q, Side s, OrderType t, Timestamp ts)
         : id(order_id)
         , price(p)
         , quantity(q)
-        , filled_quantity(0)
         , side(s)
         , type(t)
-        , status(OrderStatus::New)
         , timestamp(ts) {}
     
     [[nodiscard]] Quantity remaining_quantity() const noexcept {
