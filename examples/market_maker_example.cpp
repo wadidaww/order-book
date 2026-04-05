@@ -14,11 +14,11 @@ int main() {
     
     // Track P&L
     std::atomic<int64_t> pnl{0};
-    std::atomic<Quantity> total_volume{0};
+    std::atomic<Quantity> totalVolume{0};
     
     book.setTradeCallback([&](const Trade& trade) {
         analytics.recordTrade(trade);
-        total_volume += trade.quantity;
+        totalVolume += trade.quantity;
         
         double price = static_cast<double>(trade.price) / PRICE_SCALE;
         std::cout << "Trade: " << trade.quantity << " @ " 
