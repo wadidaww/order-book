@@ -12,8 +12,8 @@ namespace orderbook {
 template<typename T, size_t BlockSize = 4096>
 class MemoryPool {
 public:
-    MemoryPool() : current_block_(nullptr), current_slot_(0) {
-        allocate_block();
+    MemoryPool() : currentBlock_(nullptr), currentSlot_(0) {
+        allocateBlock();
     }
     
     ~MemoryPool() {
@@ -30,12 +30,12 @@ public:
     
     template<typename... Args>
     T* allocate(Args&&... args) {
-        if (current_slot_ >= BlockSize) {
-            allocate_block();
+        if (currentSlot_ >= BlockSize) {
+            allocateBlock();
         }
         
-        void* ptr = current_block_ + current_slot_;
-        ++current_slot_;
+        void* ptr = currentBlock_ + currentSlot_;
+        ++currentSlot_;
         
         return new (ptr) T(std::forward<Args>(args)...);
     }
@@ -48,9 +48,9 @@ public:
     }
     
     void clear() {
-        current_slot_ = 0;
+        currentSlot_ = 0;
         if (!blocks_.empty()) {
-            current_block_ = static_cast<T*>(blocks_[0]);
+            currentBlock_ = static_cast<T*>(blocks_[0]);
         }
     }
     
@@ -59,20 +59,20 @@ public:
     }
     
     [[nodiscard]] size_t size() const noexcept {
-        return (blocks_.size() - 1) * BlockSize + current_slot_;
+        return (blocks_.size() - 1) * BlockSize + currentSlot_;
     }
 
 private:
-    void allocate_block() {
-        void* new_block = ::operator new(BlockSize * sizeof(T));
-        blocks_.push_back(new_block);
-        current_block_ = static_cast<T*>(new_block);
-        current_slot_ = 0;
+    void allocateBlock() {
+        void* newBlock = ::operator new(BlockSize * sizeof(T));
+        blocks_.push_back(newBlock);
+        currentBlock_ = static_cast<T*>(newBlock);
+        currentSlot_ = 0;
     }
     
     std::vector<void*> blocks_;
-    T* current_block_;
-    size_t current_slot_;
+    T* currentBlock_;
+    size_t currentSlot_;
 };
 
 } // namespace orderbook

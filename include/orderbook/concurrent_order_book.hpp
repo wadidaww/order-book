@@ -24,41 +24,43 @@ public:
     ConcurrentOrderBook();
     ~ConcurrentOrderBook();
 
-    // Non-copyable
+    // Non-copyable, non-movable
     ConcurrentOrderBook(const ConcurrentOrderBook&) = delete;
     ConcurrentOrderBook& operator=(const ConcurrentOrderBook&) = delete;
+    ConcurrentOrderBook(ConcurrentOrderBook&&) = delete;
+    ConcurrentOrderBook& operator=(ConcurrentOrderBook&&) = delete;
 
     // Submit requests asynchronously. Thread-safe. Returns a future that
     // resolves to true on success, false on failure (e.g., duplicate ID).
-    [[nodiscard]] std::future<bool> submit_add_order(
+    [[nodiscard]] std::future<bool> submitAddOrder(
         OrderId id, Price price, Quantity quantity,
         Side side, OrderType type = OrderType::Limit);
 
-    [[nodiscard]] std::future<bool> submit_cancel_order(OrderId id);
+    [[nodiscard]] std::future<bool> submitCancelOrder(OrderId id);
 
-    [[nodiscard]] std::future<bool> submit_modify_order(
-        OrderId id, Price new_price, Quantity new_quantity);
+    [[nodiscard]] std::future<bool> submitModifyOrder(
+        OrderId id, Price newPrice, Quantity newQuantity);
 
     // Read-only access — delegates to the underlying OrderBook (thread-safe
     // via the shared_mutex inside OrderBook).
-    [[nodiscard]] std::optional<Order>  get_order(OrderId id)        const { return book_.get_order(id); }
-    [[nodiscard]] std::optional<Price>  best_bid()                   const { return book_.best_bid(); }
-    [[nodiscard]] std::optional<Price>  best_ask()                   const { return book_.best_ask(); }
+    [[nodiscard]] std::optional<Order>  getOrder(OrderId id)         const { return book_.getOrder(id); }
+    [[nodiscard]] std::optional<Price>  bestBid()                    const { return book_.bestBid(); }
+    [[nodiscard]] std::optional<Price>  bestAsk()                    const { return book_.bestAsk(); }
     [[nodiscard]] std::optional<Price>  spread()                     const { return book_.spread(); }
-    [[nodiscard]] std::optional<Price>  mid_price()                  const { return book_.mid_price(); }
-    [[nodiscard]] std::vector<LevelInfo> get_bids(size_t depth = 10) const { return book_.get_bids(depth); }
-    [[nodiscard]] std::vector<LevelInfo> get_asks(size_t depth = 10) const { return book_.get_asks(depth); }
-    [[nodiscard]] size_t order_count()                               const { return book_.order_count(); }
-    [[nodiscard]] size_t bid_level_count()                           const { return book_.bid_level_count(); }
-    [[nodiscard]] size_t ask_level_count()                           const { return book_.ask_level_count(); }
+    [[nodiscard]] std::optional<Price>  midPrice()                   const { return book_.midPrice(); }
+    [[nodiscard]] std::vector<LevelInfo> getBids(size_t depth = 10)  const { return book_.getBids(depth); }
+    [[nodiscard]] std::vector<LevelInfo> getAsks(size_t depth = 10)  const { return book_.getAsks(depth); }
+    [[nodiscard]] size_t orderCount()                                const { return book_.orderCount(); }
+    [[nodiscard]] size_t bidLevelCount()                             const { return book_.bidLevelCount(); }
+    [[nodiscard]] size_t askLevelCount()                             const { return book_.askLevelCount(); }
 
     // Callbacks are forwarded to the underlying OrderBook and will be invoked
     // on the worker thread. Set them before submitting any orders.
-    void set_trade_callback(TradeCallback callback) {
-        book_.set_trade_callback(std::move(callback));
+    void setTradeCallback(TradeCallback callback) {
+        book_.setTradeCallback(std::move(callback));
     }
-    void set_order_update_callback(OrderUpdateCallback callback) {
-        book_.set_order_update_callback(std::move(callback));
+    void setOrderUpdateCallback(OrderUpdateCallback callback) {
+        book_.setOrderUpdateCallback(std::move(callback));
     }
 
 private:
@@ -71,18 +73,18 @@ private:
         Price    price{0};
         Quantity quantity{0};
         Side     side{Side::Buy};
-        OrderType order_type{OrderType::Limit};
+        OrderType orderType{OrderType::Limit};
         std::promise<bool> result;
     };
 
     void enqueue(std::unique_ptr<Command> cmd);
-    void process_commands();
+    void processCommands();
 
     OrderBook book_;
 
     std::queue<std::unique_ptr<Command>> queue_;
-    std::mutex                           queue_mutex_;
-    std::condition_variable              queue_cv_;
+    std::mutex                           queueMutex_;
+    std::condition_variable              queueCv_;
     std::thread                          worker_;
 };
 
@@ -91,7 +93,7 @@ private:
 // ---------------------------------------------------------------------------
 
 inline ConcurrentOrderBook::ConcurrentOrderBook()
-    : worker_(&ConcurrentOrderBook::process_commands, this) {}
+    : worker_(&ConcurrentOrderBook::processCommands, this) {}
 
 inline ConcurrentOrderBook::~ConcurrentOrderBook() {
     // Send a Stop sentinel so the worker exits cleanly
@@ -105,27 +107,27 @@ inline ConcurrentOrderBook::~ConcurrentOrderBook() {
 
 inline void ConcurrentOrderBook::enqueue(std::unique_ptr<Command> cmd) {
     {
-        std::lock_guard<std::mutex> lock(queue_mutex_);
+        std::lock_guard<std::mutex> lock(queueMutex_);
         queue_.push(std::move(cmd));
     }
-    queue_cv_.notify_one();
+    queueCv_.notify_one();
 }
 
-inline std::future<bool> ConcurrentOrderBook::submit_add_order(
+inline std::future<bool> ConcurrentOrderBook::submitAddOrder(
     OrderId id, Price price, Quantity quantity, Side side, OrderType type) {
     auto cmd = std::make_unique<Command>();
-    cmd->type       = Command::Type::AddOrder;
-    cmd->id         = id;
-    cmd->price      = price;
-    cmd->quantity   = quantity;
-    cmd->side       = side;
-    cmd->order_type = type;
+    cmd->type      = Command::Type::AddOrder;
+    cmd->id        = id;
+    cmd->price     = price;
+    cmd->quantity  = quantity;
+    cmd->side      = side;
+    cmd->orderType = type;
     auto future = cmd->result.get_future();
     enqueue(std::move(cmd));
     return future;
 }
 
-inline std::future<bool> ConcurrentOrderBook::submit_cancel_order(OrderId id) {
+inline std::future<bool> ConcurrentOrderBook::submitCancelOrder(OrderId id) {
     auto cmd = std::make_unique<Command>();
     cmd->type = Command::Type::CancelOrder;
     cmd->id   = id;
@@ -134,24 +136,24 @@ inline std::future<bool> ConcurrentOrderBook::submit_cancel_order(OrderId id) {
     return future;
 }
 
-inline std::future<bool> ConcurrentOrderBook::submit_modify_order(
-    OrderId id, Price new_price, Quantity new_quantity) {
+inline std::future<bool> ConcurrentOrderBook::submitModifyOrder(
+    OrderId id, Price newPrice, Quantity newQuantity) {
     auto cmd = std::make_unique<Command>();
     cmd->type     = Command::Type::ModifyOrder;
     cmd->id       = id;
-    cmd->price    = new_price;
-    cmd->quantity = new_quantity;
+    cmd->price    = newPrice;
+    cmd->quantity = newQuantity;
     auto future = cmd->result.get_future();
     enqueue(std::move(cmd));
     return future;
 }
 
-inline void ConcurrentOrderBook::process_commands() {
+inline void ConcurrentOrderBook::processCommands() {
     while (true) {
         std::unique_ptr<Command> cmd;
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            queue_cv_.wait(lock, [this] { return !queue_.empty(); });
+            std::unique_lock<std::mutex> lock(queueMutex_);
+            queueCv_.wait(lock, [this] { return !queue_.empty(); });
             cmd = std::move(queue_.front());
             queue_.pop();
         }
@@ -163,15 +165,15 @@ inline void ConcurrentOrderBook::process_commands() {
         bool result = false;
         switch (cmd->type) {
             case Command::Type::AddOrder:
-                result = book_.add_order(
+                result = book_.addOrder(
                     cmd->id, cmd->price, cmd->quantity,
-                    cmd->side, cmd->order_type);
+                    cmd->side, cmd->orderType);
                 break;
             case Command::Type::CancelOrder:
-                result = book_.cancel_order(cmd->id);
+                result = book_.cancelOrder(cmd->id);
                 break;
             case Command::Type::ModifyOrder:
-                result = book_.modify_order(cmd->id, cmd->price, cmd->quantity);
+                result = book_.modifyOrder(cmd->id, cmd->price, cmd->quantity);
                 break;
             default:
                 break;

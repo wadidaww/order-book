@@ -10,25 +10,25 @@ namespace orderbook {
 // Orders are maintained in FIFO order for price-time priority
 class PriceLevel {
 public:
-    explicit PriceLevel(Price price) : price_(price), total_quantity_(0) {}
+    explicit PriceLevel(Price price) : price_(price), totalQuantity_(0) {}
     
-    void add_order(Order* order) {
+    void addOrder(Order* order) {
         orders_.push_back(order);
-        total_quantity_ += order->remaining_quantity();
+        totalQuantity_ += order->remainingQuantity();
     }
     
-    void remove_order(Order* order) {
+    void removeOrder(Order* order) {
         orders_.remove(order);
-        total_quantity_ -= order->remaining_quantity();
+        totalQuantity_ -= order->remainingQuantity();
     }
     
-    void update_quantity(Quantity old_qty, Quantity new_qty) {
-        total_quantity_ = total_quantity_ - old_qty + new_qty;
+    void updateQuantity(Quantity oldQty, Quantity newQty) {
+        totalQuantity_ = totalQuantity_ - oldQty + newQty;
     }
     
     [[nodiscard]] Price price() const noexcept { return price_; }
-    [[nodiscard]] Quantity total_quantity() const noexcept { return total_quantity_; }
-    [[nodiscard]] size_t order_count() const noexcept { return orders_.size(); }
+    [[nodiscard]] Quantity totalQuantity() const noexcept { return totalQuantity_; }
+    [[nodiscard]] size_t orderCount() const noexcept { return orders_.size(); }
     [[nodiscard]] bool empty() const noexcept { return orders_.empty(); }
     
     [[nodiscard]] const std::list<Order*>& orders() const noexcept { return orders_; }
@@ -40,7 +40,7 @@ public:
 
 private:
     Price price_;
-    Quantity total_quantity_;
+    Quantity totalQuantity_;
     std::list<Order*> orders_;  // FIFO queue for price-time priority
 };
 

@@ -31,21 +31,21 @@ private:
         
         for (size_t i = 0; i < N; ++i) {
             Price price = 100'0000 + (i % 1000) * 100;
-            book.add_order(i, price, 100, Side::Buy);
+            book.addOrder(i, price, 100, Side::Buy);
         }
         
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         
-        double avg_latency = static_cast<double>(duration.count()) / N;
-        double ops_per_sec = (N * 1'000'000.0) / duration.count();
+        double avgLatency = static_cast<double>(duration.count()) / N;
+        double opsPerSec = (N * 1'000'000.0) / duration.count();
         
         std::cout << "  Inserted " << N << " orders in " 
                   << duration.count() / 1000.0 << " ms\n";
         std::cout << "  Average latency: " << std::fixed << std::setprecision(3)
-                  << avg_latency << " μs\n";
+                  << avgLatency << " μs\n";
         std::cout << "  Throughput: " << std::fixed << std::setprecision(0)
-                  << ops_per_sec << " ops/sec\n\n";
+                  << opsPerSec << " ops/sec\n\n";
     }
     
     void benchmark_order_matching() {
@@ -57,32 +57,32 @@ private:
         // Pre-populate with resting orders
         for (size_t i = 0; i < N; ++i) {
             Price price = 100'0000 - (i % 100) * 100;
-            book.add_order(i, price, 100, Side::Buy);
+            book.addOrder(i, price, 100, Side::Buy);
         }
         
         for (size_t i = N; i < 2 * N; ++i) {
             Price price = 101'0000 + (i % 100) * 100;
-            book.add_order(i, price, 100, Side::Sell);
+            book.addOrder(i, price, 100, Side::Sell);
         }
         
         // Measure matching aggressive orders
-        size_t match_count = 0;
+        size_t matchCount = 0;
         auto start = high_resolution_clock::now();
         
         for (size_t i = 0; i < N / 10; ++i) {
-            book.add_order(2 * N + i, 101'0000, 100, Side::Buy);
-            match_count++;
+            book.addOrder(2 * N + i, 101'0000, 100, Side::Buy);
+            matchCount++;
         }
         
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         
-        double avg_latency = static_cast<double>(duration.count()) / match_count;
+        double avgLatency = static_cast<double>(duration.count()) / matchCount;
         
-        std::cout << "  Matched " << match_count << " orders in " 
+        std::cout << "  Matched " << matchCount << " orders in " 
                   << duration.count() / 1000.0 << " ms\n";
         std::cout << "  Average matching latency: " << std::fixed << std::setprecision(3)
-                  << avg_latency << " μs\n\n";
+                  << avgLatency << " μs\n\n";
     }
     
     void benchmark_order_cancellation() {
@@ -92,29 +92,29 @@ private:
         constexpr size_t N = 50'000;
         
         // Add orders
-        std::vector<OrderId> order_ids;
+        std::vector<OrderId> orderIds;
         for (size_t i = 0; i < N; ++i) {
             Price price = 100'0000 + (i % 1000) * 100;
-            book.add_order(i, price, 100, Side::Buy);
-            order_ids.push_back(i);
+            book.addOrder(i, price, 100, Side::Buy);
+            orderIds.push_back(i);
         }
         
         // Measure cancellations
         auto start = high_resolution_clock::now();
         
         for (size_t i = 0; i < N / 2; ++i) {
-            book.cancel_order(order_ids[i]);
+            book.cancelOrder(orderIds[i]);
         }
         
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         
-        double avg_latency = static_cast<double>(duration.count()) / (N / 2);
+        double avgLatency = static_cast<double>(duration.count()) / (N / 2);
         
         std::cout << "  Cancelled " << N / 2 << " orders in " 
                   << duration.count() / 1000.0 << " ms\n";
         std::cout << "  Average cancellation latency: " << std::fixed << std::setprecision(3)
-                  << avg_latency << " μs\n\n";
+                  << avgLatency << " μs\n\n";
     }
     
     void benchmark_market_data_access() {
@@ -124,8 +124,8 @@ private:
         
         // Populate book
         for (size_t i = 0; i < 1000; ++i) {
-            book.add_order(i, 100'0000 - i * 100, 100, Side::Buy);
-            book.add_order(1000 + i, 101'0000 + i * 100, 100, Side::Sell);
+            book.addOrder(i, 100'0000 - i * 100, 100, Side::Buy);
+            book.addOrder(1000 + i, 101'0000 + i * 100, 100, Side::Sell);
         }
         
         constexpr size_t N = 1'000'000;
@@ -133,20 +133,20 @@ private:
         auto start = high_resolution_clock::now();
         
         for (size_t i = 0; i < N; ++i) {
-            volatile auto bid = book.best_bid();
-            volatile auto ask = book.best_ask();
-            volatile auto mid = book.mid_price();
+            volatile auto bid = book.bestBid();
+            volatile auto ask = book.bestAsk();
+            volatile auto mid = book.midPrice();
         }
         
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<nanoseconds>(end - start);
         
-        double avg_latency = static_cast<double>(duration.count()) / N;
+        double avgLatency = static_cast<double>(duration.count()) / N;
         
         std::cout << "  " << N << " market data queries in " 
                   << duration.count() / 1'000'000.0 << " ms\n";
         std::cout << "  Average query latency: " << std::fixed << std::setprecision(0)
-                  << avg_latency << " ns\n\n";
+                  << avgLatency << " ns\n\n";
     }
     
     void benchmark_throughput() {
@@ -154,40 +154,40 @@ private:
         
         OrderBook book;
         std::mt19937 gen(42);
-        std::uniform_int_distribution<> side_dist(0, 1);
-        std::uniform_int_distribution<> price_dist(-100, 100);
-        std::uniform_int_distribution<> qty_dist(10, 200);
+        std::uniform_int_distribution<> sideDist(0, 1);
+        std::uniform_int_distribution<> priceDist(-100, 100);
+        std::uniform_int_distribution<> qtyDist(10, 200);
         
         constexpr size_t N = 100'000;
-        size_t trade_count = 0;
+        size_t tradeCount = 0;
         
-        book.set_trade_callback([&trade_count](const Trade&) {
-            trade_count++;
+        book.setTradeCallback([&tradeCount](const Trade&) {
+            tradeCount++;
         });
         
         auto start = high_resolution_clock::now();
         
         for (size_t i = 0; i < N; ++i) {
-            Side side = side_dist(gen) == 0 ? Side::Buy : Side::Sell;
+            Side side = sideDist(gen) == 0 ? Side::Buy : Side::Sell;
             Price base = 100'0000;
-            Price offset = price_dist(gen) * 100;
+            Price offset = priceDist(gen) * 100;
             Price price = base + offset;
-            Quantity qty = qty_dist(gen);
+            Quantity qty = qtyDist(gen);
             
-            book.add_order(i, price, qty, side);
+            book.addOrder(i, price, qty, side);
         }
         
         auto end = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(end - start);
         
-        double ops_per_sec = (N * 1000.0) / duration.count();
+        double opsPerSec = (N * 1000.0) / duration.count();
         
         std::cout << "  Processed " << N << " mixed operations in " 
                   << duration.count() << " ms\n";
-        std::cout << "  Generated " << trade_count << " trades\n";
+        std::cout << "  Generated " << tradeCount << " trades\n";
         std::cout << "  Overall throughput: " << std::fixed << std::setprecision(0)
-                  << ops_per_sec << " ops/sec\n";
-        std::cout << "  Book depth: " << book.order_count() << " orders\n\n";
+                  << opsPerSec << " ops/sec\n";
+        std::cout << "  Book depth: " << book.orderCount() << " orders\n\n";
     }
 };
 

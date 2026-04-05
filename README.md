@@ -108,23 +108,23 @@ int main() {
     OrderBook book;
     
     // Set up callbacks
-    book.set_trade_callback([](const Trade& trade) {
+    book.setTradeCallback([](const Trade& trade) {
         std::cout << "Trade: " << trade.quantity 
                   << " @ " << trade.price << "\n";
     });
     
     // Add orders
-    book.add_order(1, 100'0000, 100, Side::Buy);    // Buy 100 @ 100.00
-    book.add_order(2, 101'0000, 100, Side::Sell);   // Sell 100 @ 101.00
+    book.addOrder(1, 100'0000, 100, Side::Buy);    // Buy 100 @ 100.00
+    book.addOrder(2, 101'0000, 100, Side::Sell);   // Sell 100 @ 101.00
     
     // Get market data
-    auto best_bid = book.best_bid();
-    auto best_ask = book.best_ask();
+    auto bestBid = book.bestBid();
+    auto bestAsk = book.bestAsk();
     auto spread = book.spread();
     
     // Get market depth
-    auto bids = book.get_bids(10);  // Top 10 bid levels
-    auto asks = book.get_asks(10);  // Top 10 ask levels
+    auto bids = book.getBids(10);  // Top 10 bid levels
+    auto asks = book.getAsks(10);  // Top 10 ask levels
     
     return 0;
 }
@@ -142,9 +142,9 @@ int main() {
     
     // Configure market maker
     MarketMaker::Config config;
-    config.spread_ticks = 10;       // 10 ticks spread
-    config.quote_size = 100;        // 100 units per quote
-    config.max_position = 1000;     // Max 1000 units inventory
+    config.spreadTicks = 10;       // 10 ticks spread
+    config.quoteSize = 100;        // 100 units per quote
+    config.maxPosition = 1000;     // Max 1000 units inventory
     
     MarketMaker mm(book, config);
     mm.start();
@@ -175,12 +175,12 @@ int main() {
     auto opportunity = detector.detect();
     if (opportunity) {
         std::cout << "Arbitrage found!\n";
-        std::cout << "Buy @ " << opportunity->buy_price 
-                  << " on book " << opportunity->buy_book_idx << "\n";
-        std::cout << "Sell @ " << opportunity->sell_price 
-                  << " on book " << opportunity->sell_book_idx << "\n";
+        std::cout << "Buy @ " << opportunity->buyPrice 
+                  << " on book " << opportunity->buyBookIdx << "\n";
+        std::cout << "Sell @ " << opportunity->sellPrice 
+                  << " on book " << opportunity->sellBookIdx << "\n";
         std::cout << "Profit: " 
-                  << ArbitrageDetector::profit_percentage(*opportunity) 
+                  << ArbitrageDetector::profitPercentage(*opportunity) 
                   << "%\n";
     }
     
@@ -199,20 +199,20 @@ int main() {
     OrderBook book;
     Analytics analytics;
     
-    book.set_trade_callback([&](const Trade& trade) {
-        analytics.record_trade(trade);
+    book.setTradeCallback([&](const Trade& trade) {
+        analytics.recordTrade(trade);
     });
     
     // ... execute trades ...
     
     // Get statistics
-    auto stats = analytics.get_statistics();
+    auto stats = analytics.getStatistics();
     std::cout << "VWAP: " << stats.vwap << "\n";
     std::cout << "Volatility: " << stats.volatility << "\n";
-    std::cout << "Total volume: " << stats.total_volume << "\n";
+    std::cout << "Total volume: " << stats.totalVolume << "\n";
     
     // Order book imbalance
-    double imbalance = Analytics::calculate_imbalance(book);
+    double imbalance = Analytics::calculateImbalance(book);
     std::cout << "Imbalance: " << (imbalance * 100) << "%\n";
     
     return 0;
@@ -290,45 +290,45 @@ This measures:
 ### OrderBook
 
 **Methods:**
-- `add_order(id, price, qty, side, type)` - Add new order
-- `cancel_order(id)` - Cancel existing order
-- `modify_order(id, price, qty)` - Modify order (cancel-replace)
-- `get_order(id)` - Retrieve order details
-- `best_bid()` - Get best bid price
-- `best_ask()` - Get best ask price
+- `addOrder(id, price, qty, side, type)` - Add new order
+- `cancelOrder(id)` - Cancel existing order
+- `modifyOrder(id, price, qty)` - Modify order (cancel-replace)
+- `getOrder(id)` - Retrieve order details
+- `bestBid()` - Get best bid price
+- `bestAsk()` - Get best ask price
 - `spread()` - Get bid-ask spread
-- `mid_price()` - Get mid price
-- `get_bids(depth)` - Get bid levels
-- `get_asks(depth)` - Get ask levels
-- `get_volume_at_price(price, side)` - Get volume at price level
+- `midPrice()` - Get mid price
+- `getBids(depth)` - Get bid levels
+- `getAsks(depth)` - Get ask levels
+- `getVolumeAtPrice(price, side)` - Get volume at price level
 
 **Callbacks:**
-- `set_trade_callback(callback)` - Called when trades execute
-- `set_order_update_callback(callback)` - Called when order status changes
+- `setTradeCallback(callback)` - Called when trades execute
+- `setOrderUpdateCallback(callback)` - Called when order status changes
 
 ### Analytics
 
 **Methods:**
-- `record_trade(trade)` - Record trade for analysis
-- `calculate_vwap()` - Volume weighted average price
-- `calculate_volatility()` - Price volatility (std dev)
-- `get_statistics()` - Comprehensive statistics
-- `get_volume_profile()` - Price-volume distribution
-- `calculate_imbalance(book, depth)` - Order book imbalance
+- `recordTrade(trade)` - Record trade for analysis
+- `calculateVwap()` - Volume weighted average price
+- `calculateVolatility()` - Price volatility (std dev)
+- `getStatistics()` - Comprehensive statistics
+- `getVolumeProfile()` - Price-volume distribution
+- `calculateImbalance(book, depth)` - Order book imbalance
 
 ### MarketMaker
 
 **Methods:**
 - `start()` - Start market making
 - `stop()` - Stop market making
-- `update_config(config)` - Update configuration
+- `updateConfig(config)` - Update configuration
 - `position()` - Get current position
 
 ### ArbitrageDetector
 
 **Methods:**
 - `detect()` - Detect arbitrage opportunities
-- `profit_percentage(opp)` - Calculate profit percentage
+- `profitPercentage(opp)` - Calculate profit percentage
 
 ## Production Considerations
 
