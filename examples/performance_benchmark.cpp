@@ -133,9 +133,15 @@ private:
         auto start = high_resolution_clock::now();
         
         for (size_t i = 0; i < N; ++i) {
+            // why are these volatile?
+            // We use volatile here to prevent the compiler from optimizing away these calls,
+            // since we're only interested in measuring the access time, not the actual values.
             volatile auto bid = book.bestBid();
+            (void)bid;
             volatile auto ask = book.bestAsk();
-            volatile auto mid = book.midPrice();
+            (void)ask;
+            volatile auto mid = book.midPrice(); 
+            (void)mid;
         }
         
         auto end = high_resolution_clock::now();
