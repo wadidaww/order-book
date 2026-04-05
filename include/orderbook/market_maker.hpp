@@ -12,9 +12,9 @@ namespace orderbook {
 // without triggering GCC's restriction on nested-class default member
 // initializers referenced from default arguments of the enclosing class.
 struct MarketMakerConfig {
-    Price spread_ticks{10};     // Spread in ticks (scaled price units)
-    Quantity quote_size{100};   // Size of each quote
-    size_t max_position{1000};  // Maximum inventory position
+    Price spreadTicks{10};      // Spread in ticks (scaled price units)
+    Quantity quoteSize{100};    // Size of each quote
+    size_t maxPosition{1000};   // Maximum inventory position
     bool enabled{true};
 };
 
@@ -27,7 +27,7 @@ public:
     explicit MarketMaker(OrderBook& book, Config config = Config{})
         : book_(book)
         , config_(config)
-        , next_order_id_(1)
+        , nextOrderId_(1)
         , position_(0)
         , running_(false) {}
     
@@ -53,7 +53,7 @@ public:
         }
     }
     
-    void update_config(const Config& config) {
+    void updateConfig(const Config& config) {
         config_ = config;
     }
     
@@ -72,30 +72,30 @@ private:
     }
     
     void quote() {
-        auto mid = book_.mid_price();
+        auto mid = book_.midPrice();
         if (!mid) {
             return;
         }
         
-        Price mid_price = *mid;
-        Price half_spread = config_.spread_ticks / 2;
+        Price midPrice = *mid;
+        Price halfSpread = config_.spreadTicks / 2;
         
-        Price bid_price = mid_price - half_spread;
-        Price ask_price = mid_price + half_spread;
+        Price bidPrice = midPrice - halfSpread;
+        Price askPrice = midPrice + halfSpread;
         
         // Check position limits
-        if (position_.load() < static_cast<int64_t>(config_.max_position)) {
-            book_.add_order(next_order_id_++, bid_price, config_.quote_size, Side::Buy);
+        if (position_.load() < static_cast<int64_t>(config_.maxPosition)) {
+            book_.addOrder(nextOrderId_++, bidPrice, config_.quoteSize, Side::Buy);
         }
         
-        if (position_.load() > -static_cast<int64_t>(config_.max_position)) {
-            book_.add_order(next_order_id_++, ask_price, config_.quote_size, Side::Sell);
+        if (position_.load() > -static_cast<int64_t>(config_.maxPosition)) {
+            book_.addOrder(nextOrderId_++, askPrice, config_.quoteSize, Side::Sell);
         }
     }
     
     OrderBook& book_;
     Config config_;
-    std::atomic<OrderId> next_order_id_;
+    std::atomic<OrderId> nextOrderId_;
     std::atomic<int64_t> position_;
     std::atomic<bool> running_;
     std::thread worker_;

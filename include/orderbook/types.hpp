@@ -40,15 +40,15 @@ enum class OrderStatus : uint8_t {
 
 // Trade information
 struct Trade {
-    OrderId maker_order_id;
-    OrderId taker_order_id;
+    OrderId makerOrderId;
+    OrderId takerOrderId;
     Price price;
     Quantity quantity;
     Timestamp timestamp;
     
     Trade(OrderId maker, OrderId taker, Price p, Quantity q, Timestamp ts)
-        : maker_order_id(maker)
-        , taker_order_id(taker)
+        : makerOrderId(maker)
+        , takerOrderId(taker)
         , price(p)
         , quantity(q)
         , timestamp(ts) {}
@@ -59,26 +59,26 @@ struct Order {
     OrderId id;
     Price price;
     Quantity quantity;
-    Quantity filled_quantity{0};
+    Quantity filledQuantity{0};
     Side side;
     OrderType type;
     OrderStatus status{OrderStatus::New};
     Timestamp timestamp;
     
-    Order(OrderId order_id, Price p, Quantity q, Side s, OrderType t, Timestamp ts)
-        : id(order_id)
+    Order(OrderId orderId, Price p, Quantity q, Side s, OrderType t, Timestamp ts)
+        : id(orderId)
         , price(p)
         , quantity(q)
         , side(s)
         , type(t)
         , timestamp(ts) {}
     
-    [[nodiscard]] Quantity remaining_quantity() const noexcept {
-        return quantity - filled_quantity;
+    [[nodiscard]] Quantity remainingQuantity() const noexcept {
+        return quantity - filledQuantity;
     }
     
-    [[nodiscard]] bool is_filled() const noexcept {
-        return filled_quantity >= quantity;
+    [[nodiscard]] bool isFilled() const noexcept {
+        return filledQuantity >= quantity;
     }
 };
 
@@ -86,10 +86,10 @@ struct Order {
 struct LevelInfo {
     Price price;
     Quantity quantity;
-    size_t order_count;
+    size_t orderCount;
     
     LevelInfo(Price p, Quantity q, size_t count)
-        : price(p), quantity(q), order_count(count) {}
+        : price(p), quantity(q), orderCount(count) {}
 };
 
 } // namespace orderbook

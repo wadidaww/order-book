@@ -16,8 +16,8 @@ int main() {
     std::atomic<int64_t> pnl{0};
     std::atomic<Quantity> total_volume{0};
     
-    book.set_trade_callback([&](const Trade& trade) {
-        analytics.record_trade(trade);
+    book.setTradeCallback([&](const Trade& trade) {
+        analytics.recordTrade(trade);
         total_volume += trade.quantity;
         
         double price = static_cast<double>(trade.price) / PRICE_SCALE;
@@ -27,25 +27,25 @@ int main() {
     
     // Initialize the book with some orders
     std::cout << "1. Initializing order book with base orders...\n";
-    book.add_order(1, 100'0000, 500, Side::Buy);
-    book.add_order(2, 99'5000, 600, Side::Buy);
-    book.add_order(3, 101'0000, 500, Side::Sell);
-    book.add_order(4, 101'5000, 600, Side::Sell);
+    book.addOrder(1, 100'0000, 500, Side::Buy);
+    book.addOrder(2, 99'5000, 600, Side::Buy);
+    book.addOrder(3, 101'0000, 500, Side::Sell);
+    book.addOrder(4, 101'5000, 600, Side::Sell);
     
     // Print initial state
-    auto best_bid = book.best_bid();
-    auto best_ask = book.best_ask();
-    if (best_bid && best_ask) {
-        double bid = static_cast<double>(*best_bid) / PRICE_SCALE;
-        double ask = static_cast<double>(*best_ask) / PRICE_SCALE;
+    auto bestBid = book.bestBid();
+    auto bestAsk = book.bestAsk();
+    if (bestBid && bestAsk) {
+        double bid = static_cast<double>(*bestBid) / PRICE_SCALE;
+        double ask = static_cast<double>(*bestAsk) / PRICE_SCALE;
         std::cout << "Initial market: " << bid << " / " << ask << "\n\n";
     }
     
     // Configure market maker
     MarketMaker::Config config;
-    config.spread_ticks = 5000;      // 0.50 spread
-    config.quote_size = 100;         // Quote 100 units
-    config.max_position = 1000;      // Max 1000 units inventory
+    config.spreadTicks = 5000;      // 0.50 spread
+    config.quoteSize = 100;         // Quote 100 units
+    config.maxPosition = 1000;      // Max 1000 units inventory
     config.enabled = true;
     
     MarketMaker mm(book, config);
@@ -56,7 +56,7 @@ int main() {
     // Simulate some incoming orders
     std::cout << "\n3. Simulating market activity...\n\n";
     
-    OrderId order_id = 1000;
+    OrderId orderId = 1000;
     
     // Simulate for a few seconds
     for (int i = 0; i < 20; ++i) {
@@ -65,24 +65,24 @@ int main() {
         // Randomly add buy or sell orders
         if (i % 3 == 0) {
             // Aggressive buy
-            auto ask = book.best_ask();
+            auto ask = book.bestAsk();
             if (ask) {
-                book.add_order(order_id++, *ask, 50, Side::Buy);
+                book.addOrder(orderId++, *ask, 50, Side::Buy);
             }
         } else if (i % 3 == 1) {
             // Aggressive sell
-            auto bid = book.best_bid();
+            auto bid = book.bestBid();
             if (bid) {
-                book.add_order(order_id++, *bid, 50, Side::Sell);
+                book.addOrder(orderId++, *bid, 50, Side::Sell);
             }
         } else {
             // Passive order
-            auto mid = book.mid_price();
+            auto mid = book.midPrice();
             if (mid) {
-                bool is_buy = (i % 2 == 0);
-                Price price = is_buy ? (*mid - 2000) : (*mid + 2000);
-                book.add_order(order_id++, price, 30, 
-                             is_buy ? Side::Buy : Side::Sell);
+                bool isBuy = (i % 2 == 0);
+                Price price = isBuy ? (*mid - 2000) : (*mid + 2000);
+                book.addOrder(orderId++, price, 30, 
+                             isBuy ? Side::Buy : Side::Sell);
             }
         }
     }
@@ -91,27 +91,27 @@ int main() {
     mm.stop();
     
     // Print final statistics
-    auto stats = analytics.get_statistics();
+    auto stats = analytics.getStatistics();
     std::cout << "\n=== Final Statistics ===\n";
-    std::cout << "Total trades: " << stats.trade_count << "\n";
-    std::cout << "Total volume: " << stats.total_volume << "\n";
+    std::cout << "Total trades: " << stats.tradeCount << "\n";
+    std::cout << "Total volume: " << stats.totalVolume << "\n";
     std::cout << "VWAP: " << std::fixed << std::setprecision(4) 
               << stats.vwap / PRICE_SCALE << "\n";
-    std::cout << "Average trade size: " << stats.avg_trade_size << "\n";
+    std::cout << "Average trade size: " << stats.avgTradeSize << "\n";
     std::cout << "Market maker position: " << mm.position() << "\n";
     
     // Final book state
-    auto final_bid = book.best_bid();
-    auto final_ask = book.best_ask();
-    if (final_bid && final_ask) {
-        double bid = static_cast<double>(*final_bid) / PRICE_SCALE;
-        double ask = static_cast<double>(*final_ask) / PRICE_SCALE;
-        double spread = static_cast<double>(*final_ask - *final_bid) / PRICE_SCALE;
+    auto finalBid = book.bestBid();
+    auto finalAsk = book.bestAsk();
+    if (finalBid && finalAsk) {
+        double bid = static_cast<double>(*finalBid) / PRICE_SCALE;
+        double ask = static_cast<double>(*finalAsk) / PRICE_SCALE;
+        double spread = static_cast<double>(*finalAsk - *finalBid) / PRICE_SCALE;
         std::cout << "\nFinal market: " << bid << " / " << ask 
                   << " (spread: " << spread << ")\n";
     }
     
-    double imbalance = Analytics::calculate_imbalance(book);
+    double imbalance = Analytics::calculateImbalance(book);
     std::cout << "Order book imbalance: " << std::fixed << std::setprecision(2)
               << (imbalance * 100) << "%\n";
     

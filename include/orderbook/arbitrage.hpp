@@ -10,12 +10,12 @@ namespace orderbook {
 class ArbitrageDetector {
 public:
     struct Opportunity {
-        Price buy_price;
-        Price sell_price;
-        Quantity max_quantity;
+        Price buyPrice;
+        Price sellPrice;
+        Quantity maxQuantity;
         Price profit;
-        size_t buy_book_idx;
-        size_t sell_book_idx;
+        size_t buyBookIdx;
+        size_t sellBookIdx;
     };
     
     explicit ArbitrageDetector(std::vector<OrderBook*> books)
@@ -27,50 +27,50 @@ public:
             return std::nullopt;
         }
         
-        Opportunity best_opp;
-        best_opp.profit = 0;
+        Opportunity bestOpp;
+        bestOpp.profit = 0;
         bool found = false;
         
         for (size_t i = 0; i < books_.size(); ++i) {
-            auto best_ask_i = books_[i]->best_ask();
-            if (!best_ask_i) continue;
+            auto bestAskI = books_[i]->bestAsk();
+            if (!bestAskI) continue;
             
-            auto asks_i = books_[i]->get_asks(1);
-            if (asks_i.empty()) continue;
+            auto asksI = books_[i]->getAsks(1);
+            if (asksI.empty()) continue;
             
             for (size_t j = 0; j < books_.size(); ++j) {
                 if (i == j) continue;
                 
-                auto best_bid_j = books_[j]->best_bid();
-                if (!best_bid_j) continue;
+                auto bestBidJ = books_[j]->bestBid();
+                if (!bestBidJ) continue;
                 
-                auto bids_j = books_[j]->get_bids(1);
-                if (bids_j.empty()) continue;
+                auto bidsJ = books_[j]->getBids(1);
+                if (bidsJ.empty()) continue;
                 
                 // Check if we can buy at i and sell at j for profit
-                if (*best_bid_j > *best_ask_i) {
-                    Price profit = *best_bid_j - *best_ask_i;
+                if (*bestBidJ > *bestAskI) {
+                    Price profit = *bestBidJ - *bestAskI;
                     
-                    if (profit > best_opp.profit) {
-                        best_opp.buy_price = *best_ask_i;
-                        best_opp.sell_price = *best_bid_j;
-                        best_opp.max_quantity = std::min(asks_i[0].quantity, bids_j[0].quantity);
-                        best_opp.profit = profit;
-                        best_opp.buy_book_idx = i;
-                        best_opp.sell_book_idx = j;
+                    if (profit > bestOpp.profit) {
+                        bestOpp.buyPrice = *bestAskI;
+                        bestOpp.sellPrice = *bestBidJ;
+                        bestOpp.maxQuantity = std::min(asksI[0].quantity, bidsJ[0].quantity);
+                        bestOpp.profit = profit;
+                        bestOpp.buyBookIdx = i;
+                        bestOpp.sellBookIdx = j;
                         found = true;
                     }
                 }
             }
         }
         
-        return found ? std::optional<Opportunity>(best_opp) : std::nullopt;
+        return found ? std::optional<Opportunity>(bestOpp) : std::nullopt;
     }
     
     // Calculate profit percentage
-    [[nodiscard]] static double profit_percentage(const Opportunity& opp) {
-        if (opp.buy_price == 0) return 0.0;
-        return (static_cast<double>(opp.profit) / opp.buy_price) * 100.0;
+    [[nodiscard]] static double profitPercentage(const Opportunity& opp) {
+        if (opp.buyPrice == 0) return 0.0;
+        return (static_cast<double>(opp.profit) / opp.buyPrice) * 100.0;
     }
 
 private:
