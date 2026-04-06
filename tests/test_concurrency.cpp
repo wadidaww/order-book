@@ -15,9 +15,9 @@ using namespace test;
 TEST(concurrent_submit_add_order) {
     ConcurrentOrderBook book;
 
-    constexpr int THREADS           = 4;
+    constexpr int THREADS = 4;
     constexpr int ORDERS_PER_THREAD = 25;
-    constexpr int TOTAL             = THREADS * ORDERS_PER_THREAD;
+    constexpr int TOTAL = THREADS * ORDERS_PER_THREAD;
 
     // Pre-size the future vector so each thread writes to its own slots
     std::vector<std::future<bool>> futures(TOTAL);
@@ -28,16 +28,17 @@ TEST(concurrent_submit_add_order) {
         threads.emplace_back([&, t]() {
             for (int i = 0; i < ORDERS_PER_THREAD; ++i) {
                 int id = t * ORDERS_PER_THREAD + i + 1;
-                futures[id - 1] = book.submitAddOrder(
-                    id, 100'0000, 100, Side::Buy);
+                futures[id - 1] = book.submitAddOrder(id, 100'0000, 100, Side::Buy);
             }
         });
     }
-    for (auto& th : threads) th.join();
+    for (auto &th : threads)
+        th.join();
 
     int success = 0;
-    for (auto& f : futures) {
-        if (f.valid() && f.get()) ++success;
+    for (auto &f : futures) {
+        if (f.valid() && f.get())
+            ++success;
     }
 
     ASSERT_EQ(success, TOTAL);
@@ -66,11 +67,13 @@ TEST(concurrent_submit_cancel_order) {
             }
         });
     }
-    for (auto& th : threads) th.join();
+    for (auto &th : threads)
+        th.join();
 
     int cancelled = 0;
-    for (auto& f : futures) {
-        if (f.valid() && f.get()) ++cancelled;
+    for (auto &f : futures) {
+        if (f.valid() && f.get())
+            ++cancelled;
     }
 
     ASSERT_EQ(cancelled, N);
@@ -81,9 +84,8 @@ TEST(concurrent_matching) {
     ConcurrentOrderBook book;
 
     std::atomic<int> tradeCount{0};
-    book.setTradeCallback([&](const Trade&) {
-        tradeCount.fetch_add(1, std::memory_order_relaxed);
-    });
+    book.setTradeCallback(
+        [&](const Trade &) { tradeCount.fetch_add(1, std::memory_order_relaxed); });
 
     constexpr int PAIRS = 5;
 
@@ -94,22 +96,22 @@ TEST(concurrent_matching) {
 
     std::thread sellThread([&]() {
         for (int i = 0; i < PAIRS; ++i) {
-            sellFutures[i] = book.submitAddOrder(
-                i + 1, 100'0000, 100, Side::Sell);
+            sellFutures[i] = book.submitAddOrder(i + 1, 100'0000, 100, Side::Sell);
         }
     });
     std::thread buyThread([&]() {
         for (int i = 0; i < PAIRS; ++i) {
-            buyFutures[i] = book.submitAddOrder(
-                PAIRS + i + 1, 100'0000, 100, Side::Buy);
+            buyFutures[i] = book.submitAddOrder(PAIRS + i + 1, 100'0000, 100, Side::Buy);
         }
     });
 
     sellThread.join();
     buyThread.join();
 
-    for (auto& f : sellFutures) f.get();
-    for (auto& f : buyFutures)  f.get();
+    for (auto &f : sellFutures)
+        f.get();
+    for (auto &f : buyFutures)
+        f.get();
 
     ASSERT_EQ(tradeCount.load(), PAIRS);
     // All orders were matched; no resting levels should remain
@@ -158,7 +160,7 @@ TEST(callback_no_deadlock) {
     OrderBook book;
 
     bool callbackReadOk = false;
-    book.setTradeCallback([&](const Trade&) {
+    book.setTradeCallback([&](const Trade &) {
         // Calling back into the book from inside the trade callback.
         // With the old (lock-while-notifying) design this would deadlock;
         // with the new deferred design it should complete normally.
