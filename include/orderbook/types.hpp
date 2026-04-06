@@ -45,7 +45,7 @@ struct Trade {
     Price price;
     Quantity quantity;
     Timestamp timestamp;
-    
+
     Trade(OrderId maker, OrderId taker, Price p, Quantity q, Timestamp ts)
         : makerOrderId(maker)
         , takerOrderId(taker)
@@ -64,7 +64,7 @@ struct Order {
     OrderType type;
     OrderStatus status{OrderStatus::New};
     Timestamp timestamp;
-    
+
     Order(OrderId orderId, Price p, Quantity q, Side s, OrderType t, Timestamp ts)
         : id(orderId)
         , price(p)
@@ -72,14 +72,10 @@ struct Order {
         , side(s)
         , type(t)
         , timestamp(ts) {}
-    
-    [[nodiscard]] Quantity remainingQuantity() const noexcept {
-        return quantity - filledQuantity;
-    }
-    
-    [[nodiscard]] bool isFilled() const noexcept {
-        return filledQuantity >= quantity;
-    }
+
+    [[nodiscard]] Quantity remainingQuantity() const noexcept { return quantity - filledQuantity; }
+
+    [[nodiscard]] bool isFilled() const noexcept { return filledQuantity >= quantity; }
 };
 
 // Price level statistics
@@ -87,9 +83,11 @@ struct LevelInfo {
     Price price;
     Quantity quantity;
     size_t orderCount;
-    
+
     LevelInfo(Price p, Quantity q, size_t count)
-        : price(p), quantity(q), orderCount(count) {}
+        : price(p)
+        , quantity(q)
+        , orderCount(count) {}
 };
 
-} // namespace orderbook
+}  // namespace orderbook

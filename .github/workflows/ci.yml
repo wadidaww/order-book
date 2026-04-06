@@ -18,6 +18,29 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # 0. clang-format check.
+  #    Verifies that all C/C++ source files are formatted according to the
+  #    project's .clang-format style.  The job fails if any file differs from
+  #    what clang-format would produce.
+  # ---------------------------------------------------------------------------
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: |
+          find include tests examples -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \
+            | xargs clang-format --dry-run --Werror
+
+  # ---------------------------------------------------------------------------
   # 1. Build and test with two compilers in Release mode.
   #    Validates that the code compiles cleanly and all unit tests pass.
   # ---------------------------------------------------------------------------

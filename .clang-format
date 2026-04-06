@@ -1,0 +1,9 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+AllowShortEnumsOnASingleLine: false
+BreakConstructorInitializers: BeforeComma
+AllowShortFunctionsOnASingleLine: Inline
+SpacesBeforeTrailingComments: 2
+SortIncludes: false
