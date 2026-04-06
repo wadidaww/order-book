@@ -11,28 +11,26 @@ using namespace std::chrono;
 // Conservative performance thresholds chosen to catch severe regressions
 // while remaining stable on slow CI machines (benchmarks show 4-5M ops/sec;
 // thresholds are set at ~1/50th of that to give ample headroom).
-static constexpr double INSERTION_OPS_PER_SEC_MIN    = 100'000.0;
-static constexpr double CANCELLATION_OPS_PER_SEC_MIN =  50'000.0;
-static constexpr double MATCHING_OPS_PER_SEC_MIN     =  50'000.0;
-static constexpr double MARKET_DATA_LATENCY_NS_MAX   =   5'000.0; // ns per query
-static constexpr double THROUGHPUT_OPS_PER_SEC_MIN   =  50'000.0;
+static constexpr double INSERTION_OPS_PER_SEC_MIN = 100'000.0;
+static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 50'000.0;
+static constexpr double MATCHING_OPS_PER_SEC_MIN = 50'000.0;
+static constexpr double MARKET_DATA_LATENCY_NS_MAX = 5'000.0;  // ns per query
+static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 50'000.0;
 
 // Helper: throw a descriptive error when a threshold is violated
-static void check_throughput(double actual, double minimum, const char* label) {
+static void check_throughput(double actual, double minimum, const char *label) {
     if (actual < minimum) {
         std::ostringstream ss;
-        ss << label << " throughput too low: "
-           << static_cast<long long>(actual) << " ops/sec"
+        ss << label << " throughput too low: " << static_cast<long long>(actual) << " ops/sec"
            << " (minimum required: " << static_cast<long long>(minimum) << " ops/sec)";
         throw std::runtime_error(ss.str());
     }
 }
 
-static void check_latency(double actual_ns, double max_ns, const char* label) {
+static void check_latency(double actual_ns, double max_ns, const char *label) {
     if (actual_ns > max_ns) {
         std::ostringstream ss;
-        ss << label << " latency too high: "
-           << static_cast<long long>(actual_ns) << " ns"
+        ss << label << " latency too high: " << static_cast<long long>(actual_ns) << " ns"
            << " (maximum allowed: " << static_cast<long long>(max_ns) << " ns)";
         throw std::runtime_error(ss.str());
     }
@@ -108,8 +106,8 @@ TEST(market_data_latency) {
 
     // Populate a realistic order book with 500 bid and 500 ask levels
     for (size_t i = 0; i < 500; ++i) {
-        book.addOrder(i,         100'0000 - static_cast<Price>(i) * 100, 100, Side::Buy);
-        book.addOrder(500 + i,   101'0000 + static_cast<Price>(i) * 100, 100, Side::Sell);
+        book.addOrder(i, 100'0000 - static_cast<Price>(i) * 100, 100, Side::Buy);
+        book.addOrder(500 + i, 101'0000 + static_cast<Price>(i) * 100, 100, Side::Sell);
     }
 
     constexpr size_t N = 100'000;
