@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -89,11 +90,15 @@ inline void check_throughput(const double actual, const double minimum, const ch
 }
 
 // Helper: throw a descriptive error when a threshold is violated
-inline void check_latency(const double actual_ns, const double max_ns, const char *label) {
+template <typename Duration1, typename Duration2>
+inline void check_latency(Duration1 actual, Duration2 maximum, const char *label) {
+    using namespace std::chrono;
+    auto actual_ns = duration_cast<nanoseconds>(actual);
+    auto max_ns = duration_cast<nanoseconds>(maximum);
     if (actual_ns > max_ns) {
         std::ostringstream ss;
-        ss << label << " latency too high: " << static_cast<long long>(actual_ns) << " ns"
-           << " (maximum allowed: " << static_cast<long long>(max_ns) << " ns)";
+        ss << label << " latency too high: " << actual_ns.count() << " ns"
+           << " (maximum allowed: " << max_ns.count() << " ns)";
         throw std::runtime_error(ss.str());
     }
 }

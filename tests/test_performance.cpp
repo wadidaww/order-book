@@ -14,7 +14,7 @@ using namespace std::chrono;
 static constexpr double INSERTION_OPS_PER_SEC_MIN = 100'000.0;
 static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 50'000.0;
 static constexpr double MATCHING_OPS_PER_SEC_MIN = 50'000.0;
-static constexpr double MARKET_DATA_LATENCY_NS_MAX = 100.0;  // ns per query
+static constexpr std::chrono::nanoseconds MARKET_DATA_LATENCY_MAX{100};  // ns per query
 static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 50'000.0;
 
 TEST(order_insertion_throughput) {
@@ -104,10 +104,10 @@ TEST(market_data_latency) {
     }
     auto end = high_resolution_clock::now();
 
-    double ns_total = static_cast<double>(duration_cast<nanoseconds>(end - start).count());
-    double avg_ns = ns_total / static_cast<double>(N);
+    auto total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    auto avg_ns = total_ns / static_cast<long long>(N);
 
-    check_latency(avg_ns, MARKET_DATA_LATENCY_NS_MAX, "market data query");
+    check_latency(avg_ns, MARKET_DATA_LATENCY_MAX, "market data query");
 }
 
 TEST(mixed_workload_throughput) {
