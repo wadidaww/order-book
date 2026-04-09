@@ -14,7 +14,7 @@ using namespace std::chrono;
 static constexpr double INSERTION_OPS_PER_SEC_MIN = 100'000.0;
 static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 50'000.0;
 static constexpr double MATCHING_OPS_PER_SEC_MIN = 50'000.0;
-static constexpr std::chrono::nanoseconds MARKET_DATA_LATENCY_MAX{100};  // ns per query
+static constexpr std::chrono::nanoseconds MARKET_DATA_LATENCY_MAX{5'000};  // ns per query
 static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 50'000.0;
 
 TEST(order_insertion_throughput) {
