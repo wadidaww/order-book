@@ -14,27 +14,8 @@ using namespace std::chrono;
 static constexpr double INSERTION_OPS_PER_SEC_MIN = 100'000.0;
 static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 50'000.0;
 static constexpr double MATCHING_OPS_PER_SEC_MIN = 50'000.0;
-static constexpr double MARKET_DATA_LATENCY_NS_MAX = 5'000.0;  // ns per query
+static constexpr double MARKET_DATA_LATENCY_NS_MAX = 100.0;  // ns per query
 static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 50'000.0;
-
-// Helper: throw a descriptive error when a threshold is violated
-static void check_throughput(double actual, double minimum, const char *label) {
-    if (actual < minimum) {
-        std::ostringstream ss;
-        ss << label << " throughput too low: " << static_cast<long long>(actual) << " ops/sec"
-           << " (minimum required: " << static_cast<long long>(minimum) << " ops/sec)";
-        throw std::runtime_error(ss.str());
-    }
-}
-
-static void check_latency(double actual_ns, double max_ns, const char *label) {
-    if (actual_ns > max_ns) {
-        std::ostringstream ss;
-        ss << label << " latency too high: " << static_cast<long long>(actual_ns) << " ns"
-           << " (maximum allowed: " << static_cast<long long>(max_ns) << " ns)";
-        throw std::runtime_error(ss.str());
-    }
-}
 
 TEST(order_insertion_throughput) {
     OrderBook book;
@@ -136,10 +117,10 @@ TEST(mixed_workload_throughput) {
     // Alternate buy and sell orders around a mid price so some matches occur
     auto start = high_resolution_clock::now();
     for (size_t i = 0; i < N; ++i) {
-        if (i % 2 == 0) {
-            book.addOrder(i, 100'0000 + static_cast<Price>(i % 50) * 100, 100, Side::Buy);
+        if (i&1) {
+            book.addOrder(i, 1'000'000 + static_cast<Price>(i % 50) * 100, 100, Side::Buy);
         } else {
-            book.addOrder(i, 100'0000 - static_cast<Price>(i % 50) * 100, 100, Side::Sell);
+            book.addOrder(i, 1'000'000 - static_cast<Price>(i % 50) * 100, 100, Side::Sell);
         }
     }
     auto end = high_resolution_clock::now();
