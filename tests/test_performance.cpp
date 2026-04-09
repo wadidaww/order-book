@@ -117,7 +117,7 @@ TEST(mixed_workload_throughput) {
     // Alternate buy and sell orders around a mid price so some matches occur
     auto start = high_resolution_clock::now();
     for (size_t i = 0; i < N; ++i) {
-        if (i&1) {
+        if (i & 1) {
             book.addOrder(i, 1'000'000 + static_cast<Price>(i % 50) * 100, 100, Side::Buy);
         } else {
             book.addOrder(i, 1'000'000 - static_cast<Price>(i % 50) * 100, 100, Side::Sell);

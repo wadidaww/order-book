@@ -22,3 +22,5 @@ add_test(NAME MatchingTests COMMAND test_matching)
 add_test(NAME AnalyticsTests COMMAND test_analytics)
 add_test(NAME ConcurrencyTests COMMAND test_concurrency)
 add_test(NAME PerformanceTests COMMAND test_performance)
+
+add_subdirectory(data_structures)
