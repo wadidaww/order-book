@@ -15,8 +15,10 @@ namespace orderbook::detail {
 // still centralise the suppression here so it happens in exactly one place.
 //
 // On compilers that do not define __cpp_lib_hardware_interference_size the
-// constants fall back to 64, the de-facto cache-line size on x86-64 and
-// aarch64.
+// constants fall back to 64, which is the de-facto cache-line size on x86-64
+// and most AArch64 implementations.  Other architectures may use 32 or 128
+// bytes, but 64 is a safe and conservative default for the platforms this
+// project targets.
 
 #ifdef __cpp_lib_hardware_interference_size
 #if defined(__GNUC__) && !defined(__clang__)
