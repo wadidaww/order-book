@@ -1,6 +1,7 @@
 #pragma once
 
 #include "order_book.hpp"
+#include "../orderbook/cache.hpp"
 #include <atomic>
 #include <thread>
 #include <chrono>
@@ -91,7 +92,10 @@ class MarketMaker {
     Config config_;
     std::atomic<OrderId> nextOrderId_;
     std::atomic<int64_t> position_;
-    std::atomic<bool> running_;
+    // Isolated on its own cache line: written by the main thread (stop()) while
+    // nextOrderId_ and position_ are written by the worker thread.  Without the
+    // alignment the two groups would share a cache line, causing false sharing.
+    alignas(detail::destructive_interference_size) std::atomic<bool> running_;
     std::thread worker_;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cache.hpp"
 #include <cstdint>
 #include <string>
 #include <chrono>
@@ -77,6 +78,11 @@ struct Order {
 
     [[nodiscard]] bool isFilled() const noexcept { return filledQuantity >= quantity; }
 };
+
+// Verify the entire Order fits within a single cache line so that the matching
+// engine never splits a hot Order across two cache lines.
+static_assert(sizeof(Order) <= detail::constructive_interference_size,
+              "Order exceeds one cache line — re-examine the struct layout");
 
 // Price level statistics
 struct LevelInfo {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cache.hpp"
 #include <memory>
 #include <vector>
 #include <cstddef>
@@ -68,7 +69,10 @@ template <typename T, size_t BlockSize = 4096> class MemoryPool {
         currentSlot_ = 0;
     }
 
-    std::vector<void *> blocks_;
+    // blocks_ is accessed only when growing the pool (cold path).  Placing it
+    // on its own cache line prevents it from polluting the cache line that
+    // holds the hot allocation cursor (currentBlock_ + currentSlot_).
+    alignas(detail::destructive_interference_size) std::vector<void *> blocks_;
     T *currentBlock_;
     size_t currentSlot_;
 };
