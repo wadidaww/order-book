@@ -1,6 +1,7 @@
 #pragma once
 
 #include "order_book.hpp"
+#include "cache.hpp"
 #include <queue>
 #include <thread>
 #include <mutex>
@@ -88,7 +89,11 @@ class ConcurrentOrderBook {
 
     OrderBook book_;
 
-    std::queue<std::unique_ptr<Command>> queue_;
+    // The queue cluster is the hot shared state between producer threads and the
+    // worker thread.  Aligning it to a cache-line boundary ensures it does not
+    // share a cache line with the tail of book_ (which is worker-thread-only),
+    // preventing false sharing on every enqueue/dequeue operation.
+    alignas(detail::destructive_interference_size) std::queue<std::unique_ptr<Command>> queue_;
     std::mutex queueMutex_;
     std::condition_variable queueCv_;
     std::thread worker_;
