@@ -1,7 +1,23 @@
 #include <algorithm>
 #include <optional>
+#include <memory>
+#include <boost/pool/object_pool.hpp>
 
 namespace ds {
+
+// AVL tree with O(log n) insert / remove / k-th element queries.
+//
+// Node allocation is handled by boost::object_pool, which:
+//   • Pre-allocates nodes in large chunks, eliminating per-node heap overhead.
+//   • Returns nodes to the pool for reuse (O(1) dealloc) rather than calling
+//     the global operator delete each time.
+//   • Frees all pooled memory in a single step when the pool is destroyed or
+//     reset (e.g., on clear()).
+//
+// The pool is owned through std::unique_ptr so that clear() can replace it
+// with a fresh instance — triggering the old pool's destructor (which destroys
+// all still-allocated nodes and releases the backing memory) — without any
+// manual destructor/placement-new gymnastics.
 template <typename T> class AVLTree {
   public:
     class Node {
@@ -22,23 +38,38 @@ template <typename T> class AVLTree {
             , lessThan(0) {}
     };
 
-    std::optional<Node> findKthNode(int k) const { return findKthNode(root, k); }
+    std::optional<Node> findKthNode(int k) const { return findKthNode(root_, k); }
 
-    bool insert(const T value) { return insert(root, value); }
+    bool insert(const T value) { return insert(root_, value); }
 
-    bool remove(const T value) { return remove(root, value); }
+    bool remove(const T value) { return remove(root_, value); }
 
+    // Reset the tree: drop all nodes and release all pool memory in one shot.
+    // Replacing the unique_ptr triggers the pool destructor, which destroys
+    // every outstanding Node and frees the backing chunks — O(1) for the
+    // memory-release itself regardless of tree size.
     void clear() {
-        clear(root);
-        root = nullptr;
+        root_ = nullptr;
+        pool_ = std::make_unique<Pool>();
     }
 
     AVLTree()
-        : root(nullptr) {}
-    ~AVLTree() { clear(root); }
+        : root_(nullptr)
+        , pool_(std::make_unique<Pool>()) {}
+
+    // pool_ unique_ptr destructor calls ~object_pool(), which destroys all
+    // remaining nodes and returns pool chunks to the OS automatically.
+    ~AVLTree() = default;
+
+    // Non-copyable (pool is a unique resource)
+    AVLTree(const AVLTree &) = delete;
+    AVLTree &operator=(const AVLTree &) = delete;
 
   private:
-    Node *root;
+    using Pool = boost::object_pool<Node>;
+
+    Node *root_;
+    std::unique_ptr<Pool> pool_;
 
     inline std::optional<Node> findKthNode(Node *node, int k) const {
         if (!node || k < 1 || k > node->size)
@@ -62,7 +93,8 @@ template <typename T> class AVLTree {
 
     inline bool insert(Node *&node, const T &value) {
         if (!node) {
-            node = new Node(value);
+            // Allocate from the pool — O(1) amortised, no global heap call
+            node = pool_->construct(value);
             return true;
         }
         if (value < node->value) {
@@ -91,10 +123,11 @@ template <typename T> class AVLTree {
             // Node with only 0-1 child
             if (!node->left || !node->right) {
                 Node *temp = node->left ? node->left : node->right;
-                delete node;
+                // Return node to the pool — O(1), no global heap call
+                pool_->destroy(node);
                 node = temp;
             } else {
-                // Node with two children: Get the inorder successor
+                // Node with two children: get the inorder successor
                 Node *temp = minValueNode(node->right);
                 node->value = temp->value;
                 remove(node->right, temp->value);  // Delete the inorder successor
@@ -102,14 +135,6 @@ template <typename T> class AVLTree {
         }
         rebalance(node);
         return true;
-    }
-
-    void clear(Node *node) {
-        if (!node)
-            return;
-        clear(node->left);
-        clear(node->right);
-        delete node;
     }
 
     void rebalance(Node *&node) {

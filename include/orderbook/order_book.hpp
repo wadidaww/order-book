@@ -4,7 +4,7 @@
 #include "price_level.hpp"
 #include "memory_pool.hpp"
 #include <map>
-#include <unordered_map>
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
 #include <memory>
 #include <shared_mutex>
@@ -103,7 +103,10 @@ class OrderBook {
     std::map<Price, std::unique_ptr<PriceLevel>> asks_;
 
     // Order lookup: order_id -> Order*
-    std::unordered_map<OrderId, Order *> orders_;
+    // boost::unordered_flat_map uses open addressing with a flat array layout,
+    // giving roughly 2× better lookup/insert throughput than std::unordered_map
+    // (which uses separate chaining with per-bucket pointer indirection).
+    boost::unordered_flat_map<OrderId, Order *> orders_;
 
     // Memory pool for efficient order allocation
     MemoryPool<Order> orderPool_;

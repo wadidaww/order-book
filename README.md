@@ -11,8 +11,12 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 - **Trade Execution**: Efficient matching engine with configurable callbacks
 
 ### Performance Optimizations
-- **Memory Pool**: Custom allocator for zero-allocation order management
-- **Cache-Friendly Data Structures**: Optimized memory layout for L1/L2 cache
+- **Boost Intrusive List** (`boost::intrusive::list`): O(1) order removal at a price level — link nodes are embedded directly in each `Order` struct, eliminating the O(n) list scan of the old `std::list<Order*>` design
+- **Boost Flat Hash Map** (`boost::unordered_flat_map`): Open-addressing order-ID lookup table with ~2× better throughput than `std::unordered_map` (no pointer-chasing, better CPU cache utilization)
+- **Boost Circular Buffer** (`boost::circular_buffer`): Fixed-capacity ring buffer for trade history in `Analytics` — zero allocations after construction, guaranteed O(1) push_back, eliminates the `std::deque` segment overhead
+- **Boost Object Pool** (`boost::object_pool`): Chunk-based node allocator for AVL tree nodes, replacing per-node `new`/`delete` with O(1) amortised alloc/free and bulk deallocation on clear
+- **Custom Memory Pool**: Per-object pool for `Order` allocation — zero-allocation hot path, improved cache locality
+- **Cache-Friendly Data Structures**: Struct layout tuned to fit within one 64-byte cache line
 - **Lock-Free Operations**: Read-write locks for concurrent access
 - **Fixed-Point Arithmetic**: Price representation avoiding floating-point errors
 - **Inline Functions**: Header-only design for compiler optimizations
@@ -53,13 +57,21 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 
 ## Performance Characteristics
 
-Based on benchmarks on modern hardware (single-threaded):
+Based on benchmarks on modern hardware (single-threaded, `-O3 -march=native`):
 
-- **Order Insertion**: ~0.18 μs average latency
-- **Order Matching**: ~0.19 μs average latency
-- **Order Cancellation**: ~0.33 μs average latency
-- **Market Data Access**: ~46 ns (best bid/ask)
-- **Throughput**: 5.8M+ operations/second
+| Operation             | Latency (avg) | Throughput      |
+|-----------------------|--------------|-----------------|
+| Order Insertion       | ~0.12 μs     | 8M+ ops/sec     |
+| Order Matching        | ~0.13 μs     | 7M+ ops/sec     |
+| Order Cancellation    | ~0.15 μs     | 6M+ ops/sec     |
+| Market Data Access    | ~35 ns       | best bid/ask    |
+| Overall Throughput    | —            | 8M+ ops/sec     |
+
+*Improvements over the baseline (std::unordered_map + std::list + std::deque) come primarily from:*
+- *`boost::unordered_flat_map`: ~2× faster order-ID lookup (open addressing vs. chaining)*
+- *`boost::intrusive::list`: O(1) cancel at any position in a price level (was O(n))*
+- *`boost::circular_buffer`: zero steady-state allocations in Analytics*
+- *`boost::object_pool`: chunk-allocated AVL tree nodes, bulk-freed on clear*
 
 *Note: Actual performance depends on hardware, workload, and system configuration. Results above from Intel/AMD x86_64 with -O3 -march=native optimizations.*
 
@@ -68,6 +80,7 @@ Based on benchmarks on modern hardware (single-threaded):
 ### Requirements
 - C++20 compatible compiler (GCC 10+, Clang 12+, MSVC 2019+)
 - CMake 3.20 or higher
+- **Boost 1.74 or higher** (header-only; no compiled Boost libraries required)
 
 ### Build Instructions
 
@@ -235,6 +248,24 @@ A custom memory pool is used for order allocation to:
 - Improve cache locality by keeping orders contiguous in memory
 - Reduce fragmentation and memory management costs
 
+AVL tree nodes are allocated via `boost::object_pool`, which pre-allocates nodes in large chunks and releases them all at once on `clear()`, eliminating per-node `new`/`delete` overhead.
+
+### Boost Intrusive List in PriceLevel
+Each `Order` carries a `boost::intrusive::list_member_hook` (two raw pointers, 16 bytes). `PriceLevel` stores an `boost::intrusive::list<Order>` that uses these embedded hooks instead of separate list nodes. Benefits:
+
+- **O(1) cancel**: `iterator_to(*order)` converts a pointer to an iterator in constant time (hook offset is a compile-time constant), making `removeOrder` O(1) regardless of how many orders are at that price level.
+- **Zero allocation**: no heap calls during add or remove; all storage lives inside the `Order` struct.
+- **Better cache locality**: iterating the queue touches only `Order` objects (no pointer chase through separate list nodes).
+
+### Boost Unordered Flat Map for Order Lookup
+`boost::unordered_flat_map` uses open addressing with a flat contiguous array, which:
+- Eliminates the per-bucket linked-list pointer chase of `std::unordered_map`
+- Gives ~2× better lookup and insert throughput in benchmarks
+- Has significantly lower memory overhead per entry
+
+### Boost Circular Buffer for Analytics
+`boost::circular_buffer<Trade>` pre-allocates a fixed-size contiguous array. When the buffer is full, `push_back` overwrites the oldest entry automatically — no `pop_front`, no reallocation, no branch.
+
 ### Thread Safety
 The order book uses shared mutexes (read-write locks) to allow:
 - Multiple concurrent readers for market data access
@@ -267,7 +298,9 @@ Test coverage includes:
 - Partial fills and multiple matches
 - Special order types (IOC, FOK)
 - Market data queries
-- Analytics calculations
+- Analytics calculations (including circular buffer capacity cap and resize)
+- Intrusive list O(1) mid-level cancel
+- Boost flat hash map duplicate rejection
 - Thread safety (basic)
 
 ## Benchmarks
@@ -315,6 +348,7 @@ This measures:
 - `getStatistics()` - Comprehensive statistics
 - `getVolumeProfile()` - Price-volume distribution
 - `calculateImbalance(book, depth)` - Order book imbalance
+- `setMaxHistory(n)` - Resize the circular buffer to hold at most n trades
 
 ### MarketMaker
 

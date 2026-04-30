@@ -100,6 +100,41 @@ TEST(analytics_clear) {
     ASSERT_EQ(stats2.tradeCount, 0);
 }
 
+// Verify that boost::circular_buffer caps history at maxHistory_.
+// When the buffer is full the oldest entries are automatically overwritten
+// (no pop_front needed), and size() never exceeds the configured capacity.
+TEST(circular_buffer_capacity_cap) {
+    Analytics analytics;
+    constexpr size_t CAP = 5;
+    analytics.setMaxHistory(CAP);
+
+    // Record more trades than the capacity
+    for (size_t i = 0; i < CAP + 3; ++i) {
+        analytics.recordTrade(Trade(i, i + 100, 100'0000, 10, Timestamp{0}));
+    }
+
+    // Statistics should reflect only the last CAP trades
+    auto stats = analytics.getStatistics();
+    ASSERT_EQ(stats.tradeCount, CAP);
+    ASSERT_EQ(stats.totalVolume, static_cast<Quantity>(CAP * 10));
+}
+
+// Verify that setMaxHistory shrinks an existing buffer, keeping only the most
+// recent entries when new capacity is smaller than current size.
+TEST(circular_buffer_resize) {
+    Analytics analytics;
+
+    // Fill with 10 trades
+    for (size_t i = 0; i < 10; ++i) {
+        analytics.recordTrade(Trade(i, i + 100, 100'0000 + static_cast<Price>(i) * 100, 1, Timestamp{0}));
+    }
+    ASSERT_EQ(analytics.getStatistics().tradeCount, 10);
+
+    // Shrink capacity to 4 — oldest 6 trades should be dropped
+    analytics.setMaxHistory(4);
+    ASSERT_EQ(analytics.getStatistics().tradeCount, 4);
+}
+
 int main() {
     return TestSuite::instance().run();
 }

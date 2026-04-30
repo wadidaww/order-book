@@ -5,8 +5,8 @@
 #include <vector>
 #include <numeric>
 #include <cmath>
-#include <deque>
 #include <map>
+#include <boost/circular_buffer.hpp>
 
 namespace orderbook {
 
@@ -30,14 +30,12 @@ class Analytics {
 
     Analytics() = default;
 
-    // Record a trade
+    // Record a trade for subsequent statistical analysis.
+    // The circular_buffer automatically overwrites the oldest entry when the
+    // buffer reaches capacity, so no explicit pop_front() is needed and the
+    // underlying storage is never reallocated during normal operation.
     void recordTrade(const Trade &trade) {
         trades_.push_back(trade);
-
-        // Keep last N trades for performance
-        if (trades_.size() > maxHistory_) {
-            trades_.pop_front();
-        }
     }
 
     // Calculate VWAP (Volume Weighted Average Price)
@@ -154,11 +152,20 @@ class Analytics {
     // Reset analytics
     void clear() { trades_.clear(); }
 
-    void setMaxHistory(size_t max) { maxHistory_ = max; }
+    // Resize the trade history window.  The circular_buffer is resized in-place;
+    // if new capacity < current size the oldest entries are dropped.
+    void setMaxHistory(size_t max) {
+        maxHistory_ = max;
+        trades_.set_capacity(max);
+    }
 
   private:
-    std::deque<Trade> trades_;
-    size_t maxHistory_{10000};
+    // Default capacity of 10 000 trades.  boost::circular_buffer pre-allocates
+    // a contiguous block of this size, giving O(1) push_back with zero
+    // reallocation and much better cache behaviour than std::deque.
+    static constexpr size_t kDefaultMaxHistory = 10'000;
+    boost::circular_buffer<Trade> trades_{kDefaultMaxHistory};
+    size_t maxHistory_{kDefaultMaxHistory};
 };
 
 }  // namespace orderbook

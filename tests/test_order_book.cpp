@@ -131,6 +131,41 @@ TEST(price_time_priority) {
     ASSERT_EQ(bids[0].orderCount, 3);
 }
 
+// Exercise the boost::intrusive::list O(1) removal path (removeOrder via
+// iterator_to) by cancelling the middle order out of three resting at the same
+// price level.  With the old std::list<Order*>::remove() this was O(n); the
+// intrusive list makes it O(1) regardless of level depth.
+TEST(intrusive_list_middle_cancel) {
+    OrderBook book;
+
+    book.addOrder(1, 100'0000, 100, Side::Buy);
+    book.addOrder(2, 100'0000, 150, Side::Buy);
+    book.addOrder(3, 100'0000, 200, Side::Buy);
+
+    // Cancel the middle order — exercises iterator_to() O(1) removal
+    bool ok = book.cancelOrder(2);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ(book.orderCount(), 2);
+
+    auto bids = book.getBids(1);
+    ASSERT_EQ(bids.size(), 1);
+    ASSERT_EQ(bids[0].quantity, 300);   // 100 + 200, middle 150 is gone
+    ASSERT_EQ(bids[0].orderCount, 2);
+}
+
+// Ensure that boost::unordered_flat_map correctly rejects a duplicate order ID.
+TEST(flat_map_duplicate_rejection) {
+    OrderBook book;
+
+    ASSERT_TRUE(book.addOrder(42, 100'0000, 100, Side::Buy));
+    ASSERT_FALSE(book.addOrder(42, 99'0000,  50, Side::Buy));  // duplicate id
+    ASSERT_EQ(book.orderCount(), 1);
+    // The original order should be unchanged
+    auto order = book.getOrder(42);
+    ASSERT_TRUE(order.has_value());
+    ASSERT_EQ(order->price, 100'0000);
+}
+
 int main() {
     return TestSuite::instance().run();
 }

@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Boost (header-only components used: intrusive, unordered, circular_buffer, pool)
+find_package(Boost 1.74 REQUIRED)
+
 # Sanitizer options (mutually exclusive)
 option(ENABLE_ASAN "Enable AddressSanitizer + UBSanitizer + LeakSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -52,6 +55,7 @@ add_library(orderbook INTERFACE)
 target_include_directories(orderbook INTERFACE 
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+    ${Boost_INCLUDE_DIRS}
 )
 
 # Examples
