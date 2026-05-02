@@ -34,9 +34,7 @@ class Analytics {
     // The circular_buffer automatically overwrites the oldest entry when the
     // buffer reaches capacity, so no explicit pop_front() is needed and the
     // underlying storage is never reallocated during normal operation.
-    void recordTrade(const Trade &trade) {
-        trades_.push_back(trade);
-    }
+    void recordTrade(const Trade &trade) { trades_.push_back(trade); }
 
     // Calculate VWAP (Volume Weighted Average Price)
     [[nodiscard]] double calculateVwap() const {

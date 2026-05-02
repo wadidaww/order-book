@@ -63,10 +63,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install compiler
+      - name: Install compiler and Boost
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ${{ matrix.packages }}
+          sudo apt-get install -y ${{ matrix.packages }} libboost-dev
 
       - name: Configure (Release)
         run: |
@@ -93,10 +93,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Clang 18
+      - name: Install Clang 18 and Boost
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y clang-18
+          sudo apt-get install -y clang-18 libboost-dev
 
       - name: Configure (ASan + UBSan)
         run: |
@@ -129,10 +129,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Clang 18
+      - name: Install Clang 18 and Boost
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y clang-18
+          sudo apt-get install -y clang-18 libboost-dev
 
       - name: Configure (TSan)
         run: |
@@ -161,10 +161,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install GCC 13 and Valgrind
+      - name: Install GCC 13, Valgrind, and Boost
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-13 g++-13 valgrind
+          sudo apt-get install -y gcc-13 g++-13 valgrind libboost-dev
 
       - name: Configure (Debug)
         run: |

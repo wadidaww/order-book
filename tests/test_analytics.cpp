@@ -126,7 +126,8 @@ TEST(circular_buffer_resize) {
 
     // Fill with 10 trades
     for (size_t i = 0; i < 10; ++i) {
-        analytics.recordTrade(Trade(i, i + 100, 100'0000 + static_cast<Price>(i) * 100, 1, Timestamp{0}));
+        analytics.recordTrade(
+            Trade(i, i + 100, 100'0000 + static_cast<Price>(i) * 100, 1, Timestamp{0}));
     }
     ASSERT_EQ(analytics.getStatistics().tradeCount, 10);
 

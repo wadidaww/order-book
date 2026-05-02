@@ -73,8 +73,7 @@ struct Order {
     // Intrusive-list hook — must be the FIRST non-trivial member so that
     // iterator_to() resolves to a zero-byte offset on common ABIs, keeping
     // the hot-path pointer arithmetic as cheap as possible.
-    boost::intrusive::list_member_hook<
-        boost::intrusive::link_mode<boost::intrusive::normal_link>>
+    boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>>
         priceQueueHook;
 
     OrderId id;

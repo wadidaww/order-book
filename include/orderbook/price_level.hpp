@@ -10,8 +10,7 @@ namespace orderbook {
 // struct without requiring Order to inherit from a hook base class.
 using PriceQueueMemberHook = boost::intrusive::member_hook<
     Order,
-    boost::intrusive::list_member_hook<
-        boost::intrusive::link_mode<boost::intrusive::normal_link>>,
+    boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>>,
     &Order::priceQueueHook>;
 
 // Price level containing all resting orders at the same price.

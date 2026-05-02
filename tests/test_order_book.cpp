@@ -149,7 +149,7 @@ TEST(intrusive_list_middle_cancel) {
 
     auto bids = book.getBids(1);
     ASSERT_EQ(bids.size(), 1);
-    ASSERT_EQ(bids[0].quantity, 300);   // 100 + 200, middle 150 is gone
+    ASSERT_EQ(bids[0].quantity, 300);  // 100 + 200, middle 150 is gone
     ASSERT_EQ(bids[0].orderCount, 2);
 }
 
@@ -158,7 +158,7 @@ TEST(flat_map_duplicate_rejection) {
     OrderBook book;
 
     ASSERT_TRUE(book.addOrder(42, 100'0000, 100, Side::Buy));
-    ASSERT_FALSE(book.addOrder(42, 99'0000,  50, Side::Buy));  // duplicate id
+    ASSERT_FALSE(book.addOrder(42, 99'0000, 50, Side::Buy));  // duplicate id
     ASSERT_EQ(book.orderCount(), 1);
     // The original order should be unchanged
     auto order = book.getOrder(42);
