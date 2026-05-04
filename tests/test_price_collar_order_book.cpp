@@ -190,10 +190,10 @@ TEST(collar_price_time_priority) {
     book.addOrder(2, 101'0000, 100, Side::Sell);
     book.addOrder(3, 101'0000, 100, Side::Sell);
 
-    auto bids = book.getAsks(1);
-    ASSERT_EQ(bids.size(), 1);
-    ASSERT_EQ(bids[0].quantity, 300);
-    ASSERT_EQ(bids[0].orderCount, 3);
+    auto asks = book.getAsks(1);
+    ASSERT_EQ(asks.size(), 1);
+    ASSERT_EQ(asks[0].quantity, 300);
+    ASSERT_EQ(asks[0].orderCount, 3);
 }
 
 // -----------------------------------------------------------------------
