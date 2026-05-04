@@ -19,8 +19,7 @@ namespace ds {
 // are transparently skipped when front()/pop_front() advances the head.
 // The buffer is compacted instead of grown when there is sufficient
 // dead space, keeping memory use proportional to the live element count.
-template <typename T>
-class DynamicCircularQueue {
+template <typename T> class DynamicCircularQueue {
   public:
     explicit DynamicCircularQueue(size_t initialCapacity = 16)
         : buf_(initialCapacity, nullptr)
@@ -144,7 +143,7 @@ class DynamicCircularQueue {
     std::vector<T *> buf_;
     size_t head_;
     size_t tail_;
-    size_t active_;    // count of live (non-tombstone) elements
+    size_t active_;  // count of live (non-tombstone) elements
     size_t capacity_;
     std::unordered_map<T *, size_t> pos_;  // item -> slot index in buf_
 };

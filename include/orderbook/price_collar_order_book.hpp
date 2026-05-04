@@ -134,9 +134,7 @@ class PriceCollarOrderBook {
             }
         }
 
-        void updateQty(Quantity oldQty, Quantity newQty) {
-            totalQty = totalQty - oldQty + newQty;
-        }
+        void updateQty(Quantity oldQty, Quantity newQty) { totalQty = totalQty - oldQty + newQty; }
 
         [[nodiscard]] bool empty() const noexcept { return queue.empty(); }
         [[nodiscard]] Order *front() { return queue.front(); }
@@ -254,8 +252,7 @@ inline PriceCollarOrderBook::PriceCollarOrderBook(Price lowerBound, Price upperB
 }
 
 inline bool PriceCollarOrderBook::priceInCollar(Price price) const noexcept {
-    return price >= lowerBound_ && price <= upperBound_ &&
-           (price - lowerBound_) % tickSize_ == 0;
+    return price >= lowerBound_ && price <= upperBound_ && (price - lowerBound_) % tickSize_ == 0;
 }
 
 inline bool PriceCollarOrderBook::addOrder(OrderId id, Price price, Quantity quantity, Side side,
