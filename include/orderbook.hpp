@@ -12,3 +12,4 @@
 #include "orderbook/market_maker.hpp"
 #include "orderbook/arbitrage.hpp"
 #include "orderbook/analytics.hpp"
+#include "orderbook/price_collar_order_book.hpp"
