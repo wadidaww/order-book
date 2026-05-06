@@ -8,13 +8,14 @@
 
 namespace orderbook {
 
-// Type aliases for better readability and easy modifications
+// Type aliases for better readability and easy type-width changes
 using OrderId = uint64_t;
-using Price = int64_t;  // Fixed-point representation (scaled by 10000)
+using Price = int64_t;  // Fixed-point integer scaled by PRICE_SCALE (10 000)
 using Quantity = uint64_t;
 using Timestamp = std::chrono::nanoseconds;
 
-// Price scale factor for fixed-point arithmetic
+// Fixed-point scale factor: 1 Price unit = 1/PRICE_SCALE of a currency unit.
+// Example: Price 100'0000 represents 100.0000; Price 99'5500 represents 99.55.
 constexpr int64_t PRICE_SCALE = 10000;
 
 // Order side
@@ -108,11 +109,11 @@ struct Order {
 //   filledQuantity   8 B
 //   side+type+status 3 B  + 5 B padding
 //   timestamp        8 B
-//   ─────────────── 64 B  exactly one cache line
+//   ───────────────── 64 B  exactly one cache line
 static_assert(sizeof(Order) <= detail::constructive_interference_size,
               "Order exceeds one cache line — re-examine the struct layout");
 
-// Price level statistics
+// Snapshot of a single price level returned by getBids() / getAsks().
 struct LevelInfo {
     Price price;
     Quantity quantity;

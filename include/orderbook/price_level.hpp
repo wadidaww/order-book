@@ -36,6 +36,7 @@ class PriceLevel {
     PriceLevel(const PriceLevel &) = delete;
     PriceLevel &operator=(const PriceLevel &) = delete;
 
+    // Append an order to the back of the FIFO queue and update the aggregate.
     void addOrder(Order *order) {
         orders_.push_back(*order);
         totalQuantity_ += order->remainingQuantity();
@@ -48,6 +49,8 @@ class PriceLevel {
         totalQuantity_ -= order->remainingQuantity();
     }
 
+    // Update the aggregate quantity after a partial fill or modify.
+    // oldQty is the quantity before the change; newQty is the quantity after.
     void updateQuantity(Quantity oldQty, Quantity newQty) {
         totalQuantity_ = totalQuantity_ - oldQty + newQty;
     }

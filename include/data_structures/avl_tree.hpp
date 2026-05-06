@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <optional>
 #include <memory>
@@ -25,9 +27,9 @@ template <typename T> class AVLTree {
         T value;
         Node *left;
         Node *right;
-        int getHeight;
-        int size;      // Total number of nodes in the subtree rooted at this node
-        int lessThan;  // Number of nodes less than this node in the subtree rooted at this node
+        int getHeight;  // height of the subtree rooted at this node (leaf = 1)
+        int size;       // Total number of nodes in the subtree rooted at this node
+        int lessThan;   // Number of nodes less than this node in the subtree rooted at this node
 
         Node(const T &val)
             : value(val)
