@@ -1,7 +1,23 @@
+#pragma once
+
 #include <algorithm>
 #include <optional>
 
 namespace ds {
+
+// A self-balancing AVL binary search tree augmented with order-statistic
+// metadata.  Every node stores:
+//   • size     — total number of nodes in its subtree (used for rank queries)
+//   • lessThan — number of nodes in its subtree that are strictly less than
+//                the node's own value (equal to the left-subtree size)
+//
+// Supported operations (all O(log n)):
+//   insert(value)      — insert a new value; no-op if already present
+//   remove(value)      — remove a value; no-op if not found
+//   findKthNode(k)     — return the k-th smallest element (1-indexed)
+//   clear()            — delete all nodes and reset the tree
+//
+// T must be totally ordered via operator< and operator>.
 template <typename T> class AVLTree {
   public:
     class Node {
@@ -9,9 +25,9 @@ template <typename T> class AVLTree {
         T value;
         Node *left;
         Node *right;
-        int getHeight;
-        int size;      // Total number of nodes in the subtree rooted at this node
-        int lessThan;  // Number of nodes less than this node in the subtree rooted at this node
+        int getHeight;  // height of the subtree rooted at this node (leaf = 1)
+        int size;       // Total number of nodes in the subtree rooted at this node
+        int lessThan;   // Number of nodes less than this node in the subtree rooted at this node
 
         Node(const T &val)
             : value(val)
@@ -22,12 +38,19 @@ template <typename T> class AVLTree {
             , lessThan(0) {}
     };
 
+    // Return the k-th smallest node (1-indexed) in the tree, or std::nullopt
+    // if k is out of range.  O(log n).
     std::optional<Node> findKthNode(int k) const { return findKthNode(root, k); }
 
+    // Insert value into the tree.  Returns true on success, false if value is
+    // already present.  O(log n).
     bool insert(const T value) { return insert(root, value); }
 
+    // Remove value from the tree.  Returns true on success, false if value was
+    // not found.  O(log n).
     bool remove(const T value) { return remove(root, value); }
 
+    // Delete all nodes and reset the tree to empty.  O(n).
     void clear() {
         clear(root);
         root = nullptr;
@@ -112,6 +135,7 @@ template <typename T> class AVLTree {
         delete node;
     }
 
+    // Update height/size/lessThan for node, then rotate if |balance| > 1.
     void rebalance(Node *&node) {
         if (!node)
             return;
