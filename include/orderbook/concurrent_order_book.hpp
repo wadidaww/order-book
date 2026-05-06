@@ -59,7 +59,8 @@ class ConcurrentOrderBook {
     [[nodiscard]] size_t askLevelCount() const { return book_.askLevelCount(); }
 
     // Callbacks are forwarded to the underlying OrderBook and will be invoked
-    // on the worker thread. Set them before submitting any orders.
+    // on the internal worker thread.  They must be set **before** submitting
+    // any orders to avoid missing early notifications.
     void setTradeCallback(TradeCallback callback) { book_.setTradeCallback(std::move(callback)); }
     void setOrderUpdateCallback(OrderUpdateCallback callback) {
         book_.setOrderUpdateCallback(std::move(callback));

@@ -8,8 +8,22 @@
 
 namespace orderbook {
 
-// High-performance memory pool for order allocation
-// Reduces allocation overhead and improves cache locality
+// Slab-style memory pool for fixed-size object allocation.
+//
+// Allocates objects in large contiguous blocks (slabs) of `BlockSize` elements.
+// When a slab is exhausted a new one is allocated via ::operator new.
+//
+// Benefits over per-object heap allocation:
+//   • No allocation overhead on the hot order-add path
+//   • Improved cache locality: consecutive orders land in adjacent memory
+//   • No per-block deallocation during normal operation (only on clear/destroy)
+//
+// Limitations:
+//   • deallocate() only calls the destructor; the slot is not reused until
+//     clear() resets the pool.  The pool is therefore suitable for workloads
+//     that bulk-reset (e.g., end of trading session) rather than fine-grained
+//     churn.
+//   • Non-copyable and non-movable for safety.
 template <typename T, size_t BlockSize = 4096> class MemoryPool {
   public:
     MemoryPool()
@@ -24,12 +38,15 @@ template <typename T, size_t BlockSize = 4096> class MemoryPool {
         }
     }
 
-    // Non-copyable, non-movable for safety
+    // Non-copyable, non-movable — the pool owns raw memory blocks and raw
+    // pointers into them; copying or moving would invalidate those pointers.
     MemoryPool(const MemoryPool &) = delete;
     MemoryPool &operator=(const MemoryPool &) = delete;
     MemoryPool(MemoryPool &&) = delete;
     MemoryPool &operator=(MemoryPool &&) = delete;
 
+    // Construct a T in-place in the pool and return a pointer to it.
+    // Allocates a new block if the current one is exhausted.  O(1) amortised.
     template <typename... Args> T *allocate(Args &&...args) {
         if (currentSlot_ >= BlockSize) {
             allocateBlock();
@@ -41,13 +58,17 @@ template <typename T, size_t BlockSize = 4096> class MemoryPool {
         return new (ptr) T(std::forward<Args>(args)...);
     }
 
+    // Destroy the object at ptr (calls ~T()) but does not return the slot to
+    // the pool.  Slots are only reclaimed by clear().
     void deallocate(T *ptr) noexcept {
         if (ptr) {
             ptr->~T();
-            // Note: Memory is not returned to the pool, only reused on clear
         }
     }
 
+    // Reset the allocation cursor to the start of the first block, effectively
+    // reclaiming all slots.  Does NOT call destructors — callers must ensure
+    // all live objects have been destroyed before calling clear().
     void clear() {
         currentSlot_ = 0;
         if (!blocks_.empty()) {

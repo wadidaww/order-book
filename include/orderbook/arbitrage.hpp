@@ -6,22 +6,30 @@
 
 namespace orderbook {
 
-// Arbitrage detector for multiple order books
+// Cross-exchange arbitrage scanner.
+//
+// Scans every ordered pair of `OrderBook` instances and checks whether
+// `bestBid(j) > bestAsk(i)` — i.e. it is possible to buy on book i and sell
+// on book j at a profit.  Returns the most profitable opportunity found, or
+// std::nullopt if none exists.
 class ArbitrageDetector {
   public:
+    // Describes a detected arbitrage opportunity.
     struct Opportunity {
-        Price buyPrice;
-        Price sellPrice;
-        Quantity maxQuantity;
-        Price profit;
-        size_t buyBookIdx;
-        size_t sellBookIdx;
+        Price buyPrice;        // Price at which to buy (best ask of the buy book)
+        Price sellPrice;       // Price at which to sell (best bid of the sell book)
+        Quantity maxQuantity;  // Maximum executable quantity (min of the two top-level qtys)
+        Price profit;          // sellPrice − buyPrice (in fixed-point units)
+        size_t buyBookIdx;     // Index into the books vector for the buy leg
+        size_t sellBookIdx;    // Index into the books vector for the sell leg
     };
 
     explicit ArbitrageDetector(std::vector<OrderBook *> books)
         : books_(std::move(books)) {}
 
-    // Detect arbitrage opportunities across books
+    // Scan all ordered book pairs for crossed markets.  Returns the single
+    // most profitable opportunity (highest profit per unit), or std::nullopt
+    // if no arbitrage exists.  O(n²) in the number of books.
     [[nodiscard]] std::optional<Opportunity> detect() const {
         if (books_.size() < 2) {
             return std::nullopt;
@@ -72,7 +80,9 @@ class ArbitrageDetector {
         return found ? std::optional<Opportunity>(bestOpp) : std::nullopt;
     }
 
-    // Calculate profit percentage
+    // Return the profit as a percentage of the buy price:
+    //   (profit / buyPrice) × 100
+    // Returns 0.0 if buyPrice is zero.
     [[nodiscard]] static double profitPercentage(const Opportunity &opp) {
         if (opp.buyPrice == 0)
             return 0.0;

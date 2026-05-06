@@ -10,7 +10,18 @@
 
 namespace orderbook {
 
-// Trading analytics and statistics
+// Trading analytics and statistics.
+//
+// Maintains a rolling window of executed trades (capped at maxHistory_) and
+// exposes statistical queries over that window:
+//
+//   • VWAP      — volume-weighted average price
+//   • Volatility — population standard deviation of trade prices
+//   • High/Low  — price extremes in the window
+//   • Imbalance — (bidVol − askVol) / (bidVol + askVol) for top-N levels
+//
+// All query methods are const and may be called from multiple threads as long
+// as no concurrent call to recordTrade() / clear() is in progress.
 class Analytics {
   public:
     struct VolumeProfile {
@@ -19,18 +30,19 @@ class Analytics {
     };
 
     struct Statistics {
-        double vwap;           // Volume weighted average price
-        double volatility;     // Price volatility
-        Quantity totalVolume;  // Total traded volume
-        size_t tradeCount;     // Number of trades
-        Price high;            // Highest trade price
-        Price low;             // Lowest trade price
-        double avgTradeSize;   // Average trade size
+        double vwap;           // Volume-weighted average price
+        double volatility;     // Population standard deviation of trade prices
+        Quantity totalVolume;  // Total traded volume in the window
+        size_t tradeCount;     // Number of trades in the window
+        Price high;            // Highest trade price in the window
+        Price low;             // Lowest trade price in the window
+        double avgTradeSize;   // Average quantity per trade
     };
 
     Analytics() = default;
 
-    // Record a trade
+    // Append a trade to the rolling history.  If the window exceeds
+    // maxHistory_, the oldest entry is evicted.
     void recordTrade(const Trade &trade) {
         trades_.push_back(trade);
 
@@ -40,7 +52,8 @@ class Analytics {
         }
     }
 
-    // Calculate VWAP (Volume Weighted Average Price)
+    // Calculate VWAP (Volume-Weighted Average Price) over the history window.
+    // Returns 0.0 if the window is empty.
     [[nodiscard]] double calculateVwap() const {
         if (trades_.empty()) {
             return 0.0;
@@ -57,7 +70,8 @@ class Analytics {
         return sumVolume > 0 ? sumPriceVolume / sumVolume : 0.0;
     }
 
-    // Calculate price volatility (standard deviation)
+    // Calculate population standard deviation of trade prices.
+    // Returns 0.0 if fewer than 2 trades are in the window.
     [[nodiscard]] double calculateVolatility() const {
         if (trades_.size() < 2) {
             return 0.0;
@@ -81,7 +95,8 @@ class Analytics {
         return std::sqrt(variance);
     }
 
-    // Get volume profile (price -> volume distribution)
+    // Return price → volume distribution over the history window, sorted by
+    // price in ascending order.
     [[nodiscard]] std::vector<VolumeProfile> getVolumeProfile() const {
         std::map<Price, Quantity> profile;
 
@@ -99,7 +114,7 @@ class Analytics {
         return result;
     }
 
-    // Get comprehensive statistics
+    // Return aggregate statistics over the current history window.
     [[nodiscard]] Statistics getStatistics() const {
         Statistics stats{};
 
@@ -126,7 +141,10 @@ class Analytics {
         return stats;
     }
 
-    // Calculate order book imbalance (buy pressure vs sell pressure)
+    // Calculate order-book imbalance over the top `depth` price levels:
+    //   result = (bidVolume − askVolume) / (bidVolume + askVolume)
+    // Positive values indicate buy-side pressure; negative = sell-side.
+    // Returns 0.0 when both sides are empty.
     [[nodiscard]] static double calculateImbalance(const OrderBook &book, size_t depth = 5) {
         auto bids = book.getBids(depth);
         auto asks = book.getAsks(depth);
@@ -151,9 +169,10 @@ class Analytics {
                static_cast<double>(total);
     }
 
-    // Reset analytics
+    // Clear the trade history.
     void clear() { trades_.clear(); }
 
+    // Cap the rolling history window to the most recent `max` trades.
     void setMaxHistory(size_t max) { maxHistory_ = max; }
 
   private:
