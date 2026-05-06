@@ -383,18 +383,120 @@ Test coverage includes:
 
 ## Benchmarks
 
-Run performance benchmarks:
+### Running the benchmarks
 
 ```bash
+# Build first (if not already built)
+mkdir build && cd build && cmake .. && cmake --build .
+
+# Standard OrderBook benchmark
 ./examples/performance_benchmark
 ```
 
-This measures:
-- Order insertion latency
-- Matching engine latency
-- Order cancellation latency
-- Market data access latency
-- Overall throughput
+### OrderBook (tree-based, O(log n) level access)
+
+The `performance_benchmark` executable runs five micro-benchmarks against `OrderBook`
+on a single thread with `-O3 -march=native`:
+
+| Benchmark | What is measured | Typical result |
+|---|---|---|
+| Order insertion | 100,000 resting limit orders added at 1,000 distinct price levels | ~0.18 μs / order |
+| Order matching | 5,000 aggressive buy orders crossing a pre-populated sell side | ~0.19 μs / order |
+| Order cancellation | 25,000 cancel requests against a live book | ~0.33 μs / order |
+| Market data access | 1,000,000 `bestBid` + `bestAsk` + `midPrice` round-trips | ~46 ns / query |
+| Mixed throughput | 100,000 random buy/sell inserts with natural matching | 5.8 M+ ops/sec |
+
+Run and interpret:
+
+```bash
+./examples/performance_benchmark
+# Sample output:
+# 1. Order Insertion Benchmark
+#    Inserted 100000 orders in 17.842 ms
+#    Average latency: 0.178 μs
+#    Throughput: 5606979 ops/sec
+#
+# 2. Order Matching Benchmark
+#    Matched 5000 orders in 0.943 ms
+#    Average matching latency: 0.189 μs
+#
+# 3. Order Cancellation Benchmark
+#    Cancelled 25000 orders in 8.281 ms
+#    Average cancellation latency: 0.331 μs
+#
+# 4. Market Data Access Benchmark
+#    1000000 market data queries in 46.123 ms
+#    Average query latency: 46 ns
+#
+# 5. Overall Throughput Benchmark
+#    Processed 100000 mixed operations in 17 ms
+#    Generated 12048 trades
+#    Overall throughput: 5882352 ops/sec
+```
+
+### PriceCollarOrderBook (flat-array, O(1) amortised level access)
+
+`PriceCollarOrderBook` stores price levels in a flat array indexed by
+`(price - lowerBound) / tickSize`, so level lookups and best-bid/ask updates
+are O(1) amortised instead of O(log n). This yields lower and more
+predictable latency for books with a bounded, known price range.
+
+Key performance differences vs `OrderBook`:
+
+| Operation | OrderBook | PriceCollarOrderBook |
+|---|---|---|
+| Level access | O(log n) — red-black tree traversal | O(1) — direct array index |
+| Best-bid / best-ask update | O(log n) | O(1) amortised (lazy scan) |
+| Memory footprint | Proportional to active levels | Fixed: `(upperBound - lowerBound) / tickSize + 1` levels |
+| Order insertion / cancellation | O(log n) | O(1) amortised |
+| Per-level FIFO queue | `std::list` | `DynamicCircularQueue` — O(1) amortised remove |
+
+When to prefer `PriceCollarOrderBook`:
+- The instrument's valid price range is known in advance (e.g. an exchange-imposed collar)
+- The tick size is coarse enough that the flat array fits in cache
+- Ultra-low and consistent per-operation latency is required
+
+When to prefer `OrderBook`:
+- The price range is unbounded or very wide
+- Memory footprint must remain proportional to active liquidity
+
+### ConcurrentOrderBook (multi-producer, single-consumer worker thread)
+
+`ConcurrentOrderBook` wraps `OrderBook` with a lock-free-style command queue,
+serialising all mutations on a dedicated worker thread. This design is optimised
+for **throughput under contention** from multiple producer threads:
+
+| Aspect | Detail |
+|---|---|
+| Producer latency | Near-zero blocking — `submitAddOrder` enqueues a command and returns a `std::future<bool>` immediately |
+| Worker throughput | Matches `OrderBook` throughput on the single matching thread |
+| Scalability | Throughput increases as more producers are added (up to the worker's saturation point) |
+| Read-path | Delegates directly to the underlying `OrderBook` shared_mutex (concurrent readers) |
+
+```bash
+# Concurrency stress test (part of the test suite)
+cd build && ctest -R ConcurrencyTests -V
+```
+
+### Regression benchmarks (CI)
+
+`tests/test_performance.cpp` runs conservative throughput and latency assertions
+automatically on every build, catching severe regressions without requiring
+manual inspection:
+
+| Test | Threshold |
+|---|---|
+| `order_insertion_throughput` | ≥ 100,000 ops/sec |
+| `order_cancellation_throughput` | ≥ 50,000 ops/sec |
+| `order_matching_throughput` | ≥ 50,000 ops/sec |
+| `market_data_latency` | ≤ 5,000 ns / query |
+| `mixed_workload_throughput` | ≥ 50,000 ops/sec |
+
+```bash
+cd build && ./tests/test_performance
+```
+
+*Note: All figures above are from a single-threaded run on Intel/AMD x86_64 with `-O3 -march=native`. Actual results vary with hardware and system load.*
 
 ## API Reference
 
