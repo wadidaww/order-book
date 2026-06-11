@@ -8,14 +8,16 @@ using namespace orderbook;
 using namespace test;
 using namespace std::chrono;
 
-// Conservative performance thresholds chosen to catch severe regressions
-// while remaining stable on slow CI machines (benchmarks show 4-5M ops/sec;
-// thresholds are set at ~1/50th of that to give ample headroom).
-static constexpr double INSERTION_OPS_PER_SEC_MIN = 100'000.0;
-static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 50'000.0;
-static constexpr double MATCHING_OPS_PER_SEC_MIN = 50'000.0;
+// Performance thresholds.
+// Lower bound chosen to catch severe regressions while remaining stable on
+// slow CI machines.  The Boost improvements (unordered_flat_map, intrusive
+// list, circular_buffer) raise peak throughput; thresholds are set at ~1/20th
+// of expected peak to give ample CI headroom.
+static constexpr double INSERTION_OPS_PER_SEC_MIN = 200'000.0;
+static constexpr double CANCELLATION_OPS_PER_SEC_MIN = 100'000.0;
+static constexpr double MATCHING_OPS_PER_SEC_MIN = 100'000.0;
 static constexpr std::chrono::nanoseconds MARKET_DATA_LATENCY_MAX{5'000};  // ns per query
-static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 50'000.0;
+static constexpr double THROUGHPUT_OPS_PER_SEC_MIN = 100'000.0;
 
 TEST(order_insertion_throughput) {
     OrderBook book;

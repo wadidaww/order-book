@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <chrono>
+#include <boost/intrusive/list.hpp>
 
 namespace orderbook {
 
@@ -56,11 +57,26 @@ struct Trade {
         , timestamp(ts) {}
 };
 
-// Order struct optimised to fit within a single cache line (verified by the
-// static_assert below).  Hot fields (price, quantity, side, type, status) are
-// grouped first so that the matching engine's read-heavy access pattern stays
-// within the first 32 bytes.
+// Order structure optimized for cache locality.
+//
+// The priceQueueHook embeds the doubly-linked-list pointers required by
+// boost::intrusive::list directly inside the Order, avoiding a separate
+// list-node allocation and enabling O(1) removal (via iterator_to) instead
+// of the O(n) scan that std::list::remove would require.
+//
+// normal_link mode is chosen deliberately:
+//   • It stores only the two raw prev/next pointers (16 bytes), keeping the
+//     struct within one 64-byte cache line.
+//   • Unlike safe_link it does NOT assert "is the hook still linked?" at
+//     destruction time, which lets the MemoryPool::clear() fast-path reset
+//     memory without walking every live order.
 struct Order {
+    // Intrusive-list hook — must be the FIRST non-trivial member so that
+    // iterator_to() resolves to a zero-byte offset on common ABIs, keeping
+    // the hot-path pointer arithmetic as cheap as possible.
+    boost::intrusive::list_member_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>>
+        priceQueueHook;
+
     OrderId id;
     Price price;
     Quantity quantity;
@@ -84,8 +100,16 @@ struct Order {
 };
 
 // Verify the entire Order fits within a single cache line so that the matching
-// engine never splits a hot Order across two cache lines.  If this fires,
-// re-examine the struct layout (reorder or remove fields).
+// engine never splits a hot Order across two cache lines.
+// Layout (64-bit ABI):
+//   priceQueueHook  16 B  (2 × void* in normal_link mode)
+//   id               8 B
+//   price            8 B
+//   quantity         8 B
+//   filledQuantity   8 B
+//   side+type+status 3 B  + 5 B padding
+//   timestamp        8 B
+//   ───────────────── 64 B  exactly one cache line
 static_assert(sizeof(Order) <= detail::constructive_interference_size,
               "Order exceeds one cache line — re-examine the struct layout");
 
