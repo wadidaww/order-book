@@ -83,7 +83,8 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 Based on benchmarks on modern hardware (single-threaded, `-O3 -march=native`):
 
 | Operation             | Latency (avg) | Throughput      |
-|-----------------------|--------------|-----------------|\n| Order Insertion       | ~0.12 μs     | 8M+ ops/sec     |
+|-----------------------|--------------|-----------------|
+| Order Insertion       | ~0.12 μs     | 8M+ ops/sec     |
 | Order Matching        | ~0.13 μs     | 7M+ ops/sec     |
 | Order Cancellation    | ~0.15 μs     | 6M+ ops/sec     |
 | Market Data Access    | ~35 ns       | best bid/ask    |
