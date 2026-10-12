@@ -11,7 +11,7 @@ namespace orderbook::detail {
 // std::hardware_constructive_interference_size are part of C++17 <new>, but
 // GCC 12+ emits -Winterference-size when they are referenced directly (the
 // values are tied to -march and can differ across TUs).  All TUs in this
-// project share the same -march=native flag, so the values are consistent; we
+// project share the same -march flags, so the values are consistent; we
 // still centralise the suppression here so it happens in exactly one place.
 //
 // On compilers that do not define __cpp_lib_hardware_interference_size the

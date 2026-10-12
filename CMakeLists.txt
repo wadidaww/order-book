@@ -8,6 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Boost (header-only components used: intrusive, unordered, circular_buffer, pool)
 find_package(Boost 1.74 REQUIRED)
 
+# -march=native tunes for the build machine.  Turn it off for binaries that
+# must run on other CPUs (CI uses OFF: GitHub runners have mixed CPU models).
+option(ENABLE_NATIVE_ARCH "Compile Release builds with -march=native" ON)
+
 # Sanitizer options (mutually exclusive)
 option(ENABLE_ASAN "Enable AddressSanitizer + UBSanitizer + LeakSanitizer" OFF)
 option(ENABLE_TSAN "Enable ThreadSanitizer" OFF)
@@ -26,7 +30,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     # Performance flags — skipped for sanitizer and explicit Debug builds so
     # that instrumentation tools get accurate diagnostics.
     if(NOT ENABLE_ASAN AND NOT ENABLE_TSAN AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_compile_options(-march=native -O3 -DNDEBUG)
+        add_compile_options(-O3 -DNDEBUG)
+        if(ENABLE_NATIVE_ARCH)
+            add_compile_options(-march=native)
+        endif()
     endif()
 
     # AddressSanitizer + UBSanitizer + LeakSanitizer
