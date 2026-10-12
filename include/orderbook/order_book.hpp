@@ -62,6 +62,28 @@ class OrderBook {
     // Get total volume at price level
     [[nodiscard]] Quantity getVolumeAtPrice(Price price, Side side) const;
 
+    // Aggregate counts returned by visitTopLevels().
+    struct BookCounts {
+        size_t orders;
+        size_t bidLevels;
+        size_t askLevels;
+    };
+
+    // Allocation-free market-data walk: under a single shared lock, calls
+    // onBid / onAsk with (price, totalQuantity, orderCount) for the best
+    // `depth` levels of each side (best first) and returns aggregate counts.
+    template <typename BidFn, typename AskFn>
+    BookCounts visitTopLevels(size_t depth, BidFn &&onBid, AskFn &&onAsk) const {
+        std::shared_lock lock(mutex_);
+        size_t n = 0;
+        for (auto it = bids_.begin(); it != bids_.end() && n < depth; ++it, ++n)
+            onBid(it->first, it->second->totalQuantity(), it->second->orderCount());
+        n = 0;
+        for (auto it = asks_.begin(); it != asks_.end() && n < depth; ++it, ++n)
+            onAsk(it->first, it->second->totalQuantity(), it->second->orderCount());
+        return {orders_.size(), bids_.size(), asks_.size()};
+    }
+
     // Set callbacks
     void setTradeCallback(TradeCallback callback) { tradeCallback_ = std::move(callback); }
     void setOrderUpdateCallback(OrderUpdateCallback callback) {

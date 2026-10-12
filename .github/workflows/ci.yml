@@ -72,6 +72,7 @@ jobs:
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_NATIVE_ARCH=OFF \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
 
@@ -182,7 +183,8 @@ jobs:
             build/tests/test_order_book \
             build/tests/test_matching \
             build/tests/test_analytics \
-            build/tests/test_concurrency; do
+            build/tests/test_concurrency \
+            build/tests/data_structures/test_mpsc_ring_buffer; do
             echo "=== Valgrind: $(basename $test) ==="
             valgrind \
               --error-exitcode=1 \

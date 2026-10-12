@@ -4,6 +4,7 @@
 #include <vector>
 #include <atomic>
 #include <future>
+#include <optional>
 
 using namespace orderbook;
 using namespace test;
@@ -173,6 +174,181 @@ TEST(callback_no_deadlock) {
     book.addOrder(2, 100'0000, 100, Side::Buy);
 
     ASSERT_TRUE(callbackReadOk);
+}
+
+// ---------------------------------------------------------------------------
+// Lock-free submission / snapshot reads
+// ---------------------------------------------------------------------------
+
+// A future resolving implies the read API already reflects that command.
+TEST(concurrent_read_your_writes) {
+    ConcurrentOrderBook book;
+    for (int i = 1; i <= 50; ++i) {
+        ASSERT_TRUE(book.submitAddOrder(i, 100'0000 - i * 100, 10, Side::Buy).get());
+        ASSERT_EQ(book.orderCount(), static_cast<size_t>(i));
+        ASSERT_EQ(book.bestBid().value(), 100'0000 - 100);
+        ASSERT_EQ(book.bidLevelCount(), static_cast<size_t>(i));
+    }
+    ASSERT_TRUE(book.submitAddOrder(1000, 101'0000, 5, Side::Sell).get());
+    ASSERT_EQ(book.bestAsk().value(), 101'0000);
+    ASSERT_EQ(book.spread().value(), 101'0000 - 99'9900);
+    ASSERT_EQ(book.midPrice().value(), (101'0000 + 99'9900) / 2);
+}
+
+// getBids/getAsks match the plain OrderBook for depths inside and beyond the
+// lock-free snapshot (deep requests fall back to the live book).
+TEST(concurrent_depth_matches_order_book) {
+    ConcurrentOrderBook cbook;
+    OrderBook ref;
+    OrderId id = 1;
+    for (int level = 0; level < 25; ++level) {
+        for (int k = 0; k <= level % 3; ++k, ++id) {
+            Price bid = 100'0000 - level * 100;
+            Price ask = 101'0000 + level * 100;
+            ASSERT_TRUE(cbook.submitAddOrder(id, bid, 10 + k, Side::Buy).get());
+            ASSERT_TRUE(ref.addOrder(id, bid, 10 + k, Side::Buy));
+            ++id;
+            ASSERT_TRUE(cbook.submitAddOrder(id, ask, 20 + k, Side::Sell).get());
+            ASSERT_TRUE(ref.addOrder(id, ask, 20 + k, Side::Sell));
+        }
+    }
+    auto same = [](const std::vector<LevelInfo> &a, const std::vector<LevelInfo> &b) {
+        if (a.size() != b.size())
+            return false;
+        for (size_t i = 0; i < a.size(); ++i) {
+            if (a[i].price != b[i].price || a[i].quantity != b[i].quantity ||
+                a[i].orderCount != b[i].orderCount)
+                return false;
+        }
+        return true;
+    };
+    for (size_t depth : {0u, 1u, 5u, 10u, 11u, 25u, 100u}) {
+        ASSERT_TRUE(same(cbook.getBids(depth), ref.getBids(depth)));
+        ASSERT_TRUE(same(cbook.getAsks(depth), ref.getAsks(depth)));
+    }
+    ASSERT_EQ(cbook.orderCount(), ref.orderCount());
+    ASSERT_EQ(cbook.bidLevelCount(), ref.bidLevelCount());
+    ASSERT_EQ(cbook.askLevelCount(), ref.askLevelCount());
+}
+
+// Readers spinning on the lock-free API must never observe a torn snapshot.
+// Writers only add non-crossing orders, so every consistent snapshot has
+// bid < ask, strictly ordered levels and level counts within the totals.
+TEST(concurrent_readers_see_consistent_snapshots) {
+    ConcurrentOrderBook book;
+    std::atomic<bool> done{false};
+    std::atomic<int> violations{0};
+    std::atomic<long> reads{0};
+
+    std::vector<std::thread> readers;
+    for (int r = 0; r < 2; ++r) {
+        readers.emplace_back([&] {
+            long n = 0;
+            while (!done.load(std::memory_order_relaxed)) {
+                auto spread = book.spread();
+                if (spread && *spread <= 0)
+                    violations.fetch_add(1);
+                auto bids = book.getBids(10);
+                for (size_t i = 1; i < bids.size(); ++i) {
+                    if (bids[i].price >= bids[i - 1].price)
+                        violations.fetch_add(1);
+                }
+                auto asks = book.getAsks(10);
+                for (size_t i = 1; i < asks.size(); ++i) {
+                    if (asks[i].price <= asks[i - 1].price)
+                        violations.fetch_add(1);
+                }
+                for (const auto &l : bids) {
+                    if (l.orderCount == 0 || l.quantity == 0)
+                        violations.fetch_add(1);
+                }
+                ++n;
+                // Let the writer run on machines with fewer cores than threads
+                // (and under Valgrind, which runs one thread at a time).
+                std::this_thread::yield();
+            }
+            reads.fetch_add(n);
+        });
+    }
+
+    constexpr int N = 2000;
+    std::vector<std::future<bool>> futures;
+    futures.reserve(2 * N);
+    for (int i = 0; i < N; ++i) {
+        Price offset = (i % 40) * 100;
+        futures.push_back(book.submitAddOrder(2 * i + 1, 100'0000 - offset, 1 + i % 7, Side::Buy));
+        futures.push_back(book.submitAddOrder(2 * i + 2, 100'0100 + offset, 1 + i % 5, Side::Sell));
+        if (i % 3 == 0)
+            futures.push_back(book.submitCancelOrder(2 * i + 1));
+    }
+    for (auto &f : futures)
+        f.get();
+    done.store(true);
+    for (auto &t : readers)
+        t.join();
+
+    ASSERT_EQ(violations.load(), 0);
+    ASSERT_TRUE(reads.load() > 0);
+    ASSERT_EQ(book.bidLevelCount(), 40u);
+    ASSERT_EQ(book.askLevelCount(), 40u);
+}
+
+// Fire-and-forget commands from several threads, with a tiny command queue
+// to force back-pressure; a final future per producer acts as a barrier.
+TEST(concurrent_post_with_small_queue) {
+    ConcurrentOrderBook book(8);
+    std::atomic<int> updates{0};
+    book.setOrderUpdateCallback([&](const Order &) { updates.fetch_add(1); });
+
+    constexpr int THREADS = 3;
+    constexpr int PER_THREAD = 2000;
+    std::vector<std::thread> threads;
+    for (int t = 0; t < THREADS; ++t) {
+        threads.emplace_back([&, t] {
+            OrderId base = static_cast<OrderId>(t) * PER_THREAD;
+            for (int i = 1; i <= PER_THREAD; ++i)
+                book.postAddOrder(base + i, 90'0000 + i, 1, Side::Buy);
+            for (int i = 1; i <= PER_THREAD; i += 2)
+                book.postCancelOrder(base + i);
+            book.submitCancelOrder(0).get();  // unknown id; just waits
+        });
+    }
+    for (auto &th : threads)
+        th.join();
+
+    ASSERT_EQ(book.orderCount(), static_cast<size_t>(THREADS * PER_THREAD / 2));
+    ASSERT_EQ(updates.load(), THREADS * PER_THREAD * 3 / 2);
+}
+
+// Callbacks run on the worker thread and must see the live book state that
+// the triggering command produced, not the previous snapshot.
+TEST(concurrent_callback_reads_live_book) {
+    ConcurrentOrderBook book;
+    std::optional<Price> seenAsk;
+    size_t seenCount = 0;
+    book.setOrderUpdateCallback([&](const Order &o) {
+        if (o.id == 2) {
+            seenAsk = book.bestAsk();
+            seenCount = book.orderCount();
+        }
+    });
+    ASSERT_TRUE(book.submitAddOrder(1, 100'0000, 10, Side::Buy).get());
+    ASSERT_TRUE(book.submitAddOrder(2, 101'0000, 10, Side::Sell).get());
+    ASSERT_TRUE(seenAsk.has_value());
+    ASSERT_EQ(*seenAsk, 101'0000);
+    ASSERT_EQ(seenCount, 2u);
+}
+
+// The destructor drains every command submitted before it.
+TEST(concurrent_destructor_drains_queue) {
+    std::atomic<int> updates{0};
+    {
+        ConcurrentOrderBook book;
+        book.setOrderUpdateCallback([&](const Order &) { updates.fetch_add(1); });
+        for (int i = 1; i <= 500; ++i)
+            book.postAddOrder(i, 100'0000, 1, Side::Buy);
+    }
+    ASSERT_EQ(updates.load(), 500);
 }
 
 int main() {

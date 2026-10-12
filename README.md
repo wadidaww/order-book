@@ -13,7 +13,7 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 ### Order Book Variants
 - **`OrderBook`**: Standard tree-based limit order book with O(log n) level access
 - **`PriceCollarOrderBook`**: Hard price-collar variant with O(1) amortised level access via a flat array indexed by price; rejects any order outside `[lowerBound, upperBound]`
-- **`ConcurrentOrderBook`**: Multi-producer wrapper that serialises all mutations on a dedicated worker thread, eliminating lock contention on the critical matching path
+- **`ConcurrentOrderBook`**: Multi-producer wrapper that serialises all mutations on a dedicated worker thread, fed by a lock-free MPSC ring buffer, with lock-free (seqlock) market-data reads
 
 ### Performance Optimizations
 - **Boost Intrusive List** (`boost::intrusive::list`): O(1) order removal at a price level — link nodes are embedded directly in each `Order` struct, eliminating the O(n) list scan of the old `std::list<Order*>` design
@@ -35,7 +35,7 @@ A production-ready, low-latency limit order book implementation in modern C++ (C
 - **Shared Mutex**: Read-write locks allow concurrent market-data readers with exclusive writer access
 - **Atomic Operations**: Lock-free position tracking in `MarketMaker`
 - **Thread-Safe Callbacks**: All event notifications are dispatched outside the lock to prevent re-entrancy deadlocks
-- **`ConcurrentOrderBook`**: Single-consumer command queue fully serialises the matching path
+- **`ConcurrentOrderBook`**: Lock-free MPSC command queue fully serialises the matching path; market data is read from a seqlock snapshot without locks
 
 ## Architecture
 
@@ -232,6 +232,10 @@ int main() {
     bool ok1 = f1.get();  // block until the worker processes the command
     bool ok2 = f2.get();
 
+    // Fire-and-forget: no future (cheapest path); outcomes arrive via callbacks.
+    book.postAddOrder(3, 99'5000, 50, Side::Buy);
+    book.postCancelOrder(3);
+
     return 0;
 }
 ```
@@ -371,7 +375,10 @@ The order books use `std::shared_mutex` (read-write lock) to allow:
 - Exclusive writer access for order mutations
 - All callbacks dispatched **outside** the lock to prevent re-entrancy deadlocks
 
-`ConcurrentOrderBook` takes a different approach: a single background worker thread drains a mutex-protected `std::queue<Command>`, so the matching path is never contended.
+`ConcurrentOrderBook` takes a different approach, with no mutex on its hot paths:
+- **Submission**: producers write commands in place into `ds::MpscRingBuffer`, a bounded multi-producer / single-consumer ring buffer (one CAS per command, no allocation for the command). The worker spins briefly when idle, then parks on an atomic wait; producers only pay for a wake-up when it is actually asleep.
+- **Market data**: after each batch of commands (up to 64) the worker publishes best bid/ask, counts and the top `kPublishedDepth` (10) levels per side into a seqlock snapshot. `bestBid`, `bestAsk`, `spread`, `midPrice`, `getBids`/`getAsks` (up to 10 levels) and the counters read it without locks, so readers can no longer starve the matching thread. Deeper `getBids`/`getAsks` requests and `getOrder` read the live book under its shared lock.
+- **Ordering**: a command's future resolves only after the snapshot containing it is published, so a thread that waited on a future always reads its own write. Matching itself is unchanged: every mutation still runs through `OrderBook` on the one worker thread, so price-time priority is identical.
 
 ### Order Matching
 The matching engine implements price-time priority:
@@ -407,7 +414,7 @@ Test coverage includes:
 - Analytics calculations (including circular buffer capacity cap and resize)
 - Intrusive list O(1) mid-level cancel
 - Boost flat hash map duplicate rejection
-- Thread safety (basic concurrency)
+- Thread safety: concurrent submission, snapshot consistency under concurrent readers, back-pressure, `MpscRingBuffer` exactly-once / per-producer FIFO delivery
 - Price collar enforcement (reject out-of-range orders, tick alignment)
 - `DynamicCircularQueue` operations (push, pop, arbitrary remove, compaction, growth)
 - `AVLTree` operations (insert, remove, order-statistic queries)
@@ -422,7 +429,13 @@ mkdir build && cd build && cmake .. && cmake --build .
 
 # Standard OrderBook benchmark
 ./examples/performance_benchmark
+
+# ConcurrentOrderBook: multi-producer throughput, latency, readers vs writer
+./benchmarks/concurrent_benchmark
 ```
+
+Release builds use `-march=native` by default; pass `-DENABLE_NATIVE_ARCH=OFF`
+for binaries that must run on other CPUs (CI does).
 
 ### OrderBook (tree-based, O(log n) level access)
 
@@ -493,20 +506,37 @@ When to prefer `OrderBook`:
 
 ### ConcurrentOrderBook (multi-producer, single-consumer worker thread)
 
-`ConcurrentOrderBook` wraps `OrderBook` with a lock-free-style command queue,
-serialising all mutations on a dedicated worker thread. This design is optimised
-for **throughput under contention** from multiple producer threads:
+`ConcurrentOrderBook` wraps `OrderBook` with a lock-free MPSC command queue,
+serialising all mutations on a dedicated worker thread, and serves market data
+from a seqlock snapshot:
 
 | Aspect | Detail |
 |---|---|
-| Producer latency | Near-zero blocking — `submitAddOrder` enqueues a command and returns a `std::future<bool>` immediately |
-| Worker throughput | Matches `OrderBook` throughput on the single matching thread |
-| Scalability | Throughput increases as more producers are added (up to the worker's saturation point) |
-| Read-path | Delegates directly to the underlying `OrderBook` shared_mutex (concurrent readers) |
+| Producer path | One CAS into a bounded ring buffer; waits only when the queue is full |
+| Worker wake-up | Spin, then yield, then atomic wait — no condition variable or mutex |
+| Read path | Lock-free seqlock snapshot for top-of-book, top 10 levels and counters |
+| Fire-and-forget | `post*` variants skip the `std::promise`/`std::future` round trip entirely |
+
+`benchmarks/concurrent_benchmark` measures it against a mixed add / cross /
+cancel / modify flow. Medians of 5 runs on a 4-vCPU x86_64 cloud VM (GCC 13,
+`-O3 -march=native`), mutex-based queue before vs. lock-free after:
+
+| Scenario | Before | After |
+|---|---|---|
+| Pipelined `submit*` throughput, 1 producer | 0.35 M ops/s | 0.61 M ops/s |
+| Pipelined `submit*` throughput, 3 producers | 0.31 M ops/s | 0.48 M ops/s |
+| Round-trip latency p50 / p99 | 40.0 / 104.5 µs | 20.8 / 65.7 µs |
+| Writer throughput with 2 readers polling | 0.02 M ops/s | 0.64 M ops/s |
+| Reader throughput (2 readers) | 4.1 M reads/s | 96.2 M reads/s |
+| Fire-and-forget `post*`, 1 producer | — | 2.95 M ops/s |
+
+The `submit*` paths remain bounded by `std::promise`/`std::future` (heap
+allocation and a cross-thread hand-off per command); `post*` avoids both.
 
 ```bash
-# Concurrency stress test (part of the test suite)
-cd build && ctest -R ConcurrencyTests -V
+# Concurrency benchmark and stress tests
+cd build && ./benchmarks/concurrent_benchmark
+ctest -R "ConcurrencyTests|MpscRingBufferTests" -V
 ```
 
 ### Regression benchmarks (CI)
@@ -577,6 +607,8 @@ Same interface as `OrderBook` plus:
 - `submitAddOrder(id, price, qty, side, type)` → `std::future<bool>`
 - `submitCancelOrder(id)` → `std::future<bool>`
 - `submitModifyOrder(id, newPrice, newQty)` → `std::future<bool>`
+- `postAddOrder(...)` / `postCancelOrder(id)` / `postModifyOrder(...)` — Fire-and-forget variants with no future; commands from one thread are applied in order, so a later `submit*` future works as a barrier
+- `ConcurrentOrderBook(queueCapacity = 16384)` — Command-queue capacity (rounded up to a power of two); producers wait when it is full
 - All read-only methods from `OrderBook` (`getOrder`, `bestBid`, `bestAsk`, `spread`, `midPrice`, `getBids`, `getAsks`, `orderCount`, …)
 - `setTradeCallback(fn)` / `setOrderUpdateCallback(fn)` — Must be set **before** submitting any orders
 
